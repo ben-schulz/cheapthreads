@@ -1,0 +1,18 @@
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main = (loop_R (\r -> resume_R (fst r) >>= \t -> return (snd r, t))) (phi, psi)
+
+phi :: (R Int)
+phi =
+  (loop_R (\x ->
+    step_R (get G >>= \v -> put G (v + 1) >> return v) >>= \v ->
+    return v)
+  ) 0
+
+psi :: (R Int)
+psi = step_R (get G)
+
+

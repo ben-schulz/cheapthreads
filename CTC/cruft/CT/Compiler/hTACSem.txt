@@ -1,0 +1,173 @@
+::Hask Three Address Code::
+
+::Conventions::
+This document uses the following conventions to describe the hTAC intermediate representation for HASK compilers.
+Commands are presented in Haskell as an abstract syntax, and in traditional notation for three address code.
+* SP -- Represents the stack pointer in the system being used
+* (VR, Register, rX) -- Virtual Register.  This represents a virtual register in the system.  X is an arbitrary
+  numerical designation. The number of possible virtual registers in a "system" is unbounded.
+
+* (*) signifies a dereference operation
+* (&) signifies a reference operation
+* ([x]) signifies a word-oriented dereference with the offset x from a base address (like an array in C).
+* Label - An string abstraction representing a memory address oriented placeholder.  Resolved by the assembler.
+* For the purposes of this language and documentation, all memory operations are assumed to be WORD ALIGNED.
+  However, it is understood that offset sizes are specified in bytes.
+* Counting variables are denoted by the letter "i".
+* Labels for Jumping are denoted by a capital "L" and a number.
+* cX specifies a constant, or immediate value for use in some commands
+* lblX specifies a label constant, effectively a memory address as an immediate value.
+
+::History::
+The HASK three address code is an intermediate representation for programs being compiled through HASK compilers.
+This is the final stage of the HASK CT compiler (amongst others) before compilation to concrete assembly languages.
+For more information on what Three Address Code is, please visit http://en.wikipedia.org/wiki/Three_address_code.
+
+::Three Address Commands::
+
+PushReg r1 
+
+    *SP := r1           ;Place the contents of r1 at the memory location SP
+     SP := SP + 4       ;Increment the SP by one word width
+
+     The PushReg operation is a simple push command that pushes the contents of a register (r1) onto the stack.
+     The stack pointer is then incremented by four (bytes) following the push.
+
+PushMem r1 r2 
+
+    i := 0              ;initialize counter
+L1: SP[i] := r1[i]      ;Push a word on the stack
+    SP := SP + 4        ;Increment the stack pointer by one word
+    i := i  + 4         ;Increment the counter by one word
+    if i < r2 goto L1   ;If the counter is less than the offset, go to Jump to L1 
+
+    PushMem takes a range of memory starting at the base address r1 to the offset r2 and places the entire range
+    onto the stack.  The stack is then incremented to reflect this movement.  Word alignment is assumed.
+
+PopReg r1 
+   
+   r1 := *(SP - 4)
+   SP := SP - 4
+
+   PopReg takes the word located on the top of the stack and places it in the register r1.  The stack pointer is then
+   decremented by one word width.
+
+MoveMem r1 r2 r3 
+   
+    i := 0              ;initialize counter
+L1: r1[i] := r2[i]      ;Copy word from r2[i] to r1[i]
+    i := i  + 4         ;Increment the counter by one word width
+    if i < r3 goto L1   ;If the counter is less than the offset, go to Jump to L1 
+
+    MoveMem takes a range of memory starting at the base address stored in register r2 to the offset stored in r3.
+    The range of memory specified by r2 and r3 is stored starting at the base address in register r1.  Word alignment
+    is assumed.
+
+Constant r1 c1 
+
+    r1 := c1 
+
+    Constant takes an immedate constant value c1 and stores it in the register r1.
+
+ConstLabel r1 lbl1 
+
+   r1 := lbl1 
+
+   ConstantLabel takes an immediate constant value lbl1 (memory address) and stores it in the register r1.
+
+Labeled Label
+
+   Labeled lbl1 specifies a label in the TAC as a placeholder to be compiled down to assembly.  Labels are 
+   specified by using this command.
+
+Unary r1 Deref r2 
+
+   r1 := *r2
+
+   Unary Deref dereferences the address stored in register r2 and stores the resultant value in register r1.
+
+Unary r1 Neg r2 
+
+   r1 := -1 X r2
+
+   Unary Neg takes the opposite of the value stored in register r2 and stores it in register r1
+
+Binary r1 r2 Plus r3 
+
+   r1 := r2 + r3
+
+   Binary Plus takes the sum of the contents of registers r2 and r3, storing it in register r1.
+
+Binary r1 r2 Minus r3 
+
+   r1 := r2 - r3
+
+   Binary Minus takes the difference of the contents of r2 and r3, storing it in register r1.
+
+Binary r1 r2 IsEqual r3 
+
+   if r2 == r3 then 
+     r1 := 1
+   else
+     r1 := 0
+
+   Binary IsEqual takes the contents of registers r2 and r3 and checks them for equality.  An equality between
+   the contents of registers r2 and r3 results in r1 being assigned a value of one.  All else result in r1 being
+   assigned a value of zero.
+
+Binary r1 r2 GrtrThan r3
+
+   if r2 > r3 then
+     r1 := 1
+   else
+     r1 := 0
+
+   Binary GrtrThan takes the contents of r2 and r3 and checks if r2 is greater than r3.  If so, r1 is set to 1.
+   in all other cases, r1 is set to zero.
+
+Binary r1 r2 LessThan r3
+
+   if r2 < r3 then
+     r1 := 1
+   else
+     r1 := 0
+
+   Binary GrtrThan takes the contents of r2 and r3 and checks if r2 is less than r3.  If so, r1 is set to 1.
+   in all other cases, r1 is set to zero.
+
+Move r1 r2 
+
+   r1 := r2 
+
+   Move assigns the value of register r2 to register r1.  Data in r1 is subsequently lost.
+
+BZero r1 lbl1 
+
+   if r1 == 0 goto lbl1 
+
+   BZero "branches" or jumps to the address lbl1 if the value of register r1 is equal to zero.
+
+Jump lbl1 
+
+   goto lbl1
+
+   Jump "jumps" or "goes to" the memory address lbl1 in all cases.
+
+Comment str1 
+
+   A Comment contains a string that is a comment, or is otherwise unused.  This is for debugging purposes with TAC.
+   These are stripped in compilation processes.
+
+PutStr str1 
+   
+   PRINT str1
+
+   PutStr puts the contents of str1 on some output buffer.  In most cases this should be some form of STDOUT.
+   Effectively, this command is meant to be used as a PRINT command.
+
+PutReg r1
+
+   PRINT r1
+
+   PutReg puts the contents/dereffed? of the register r1 to some output buffer.  In most cases this should be some form of
+   STDOUT.  Effectively, this command is meant to be used as a PRINT command for a register.

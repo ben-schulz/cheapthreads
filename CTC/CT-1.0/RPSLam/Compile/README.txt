@@ -1,0 +1,11 @@
+--
+-- this is ~/cheapthreads/CTC/CT-1.0/RPSLam/Compile
+--
+-- code generation functions and a simple compiler phase or two for
+-- the RPS demonstration compiler
+--
+--
+-- put here (2010.12.14)
+--
+-- Schulz
+--

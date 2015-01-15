@@ -1,0 +1,49 @@
+
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main :: (R ()) -> (R ())
+main phi =
+
+    (fix (\k -> \r ->
+
+      if (isDone r)
+      then r
+      else
+
+        -- periodically intersperse the code of 'r' with the code 'act':
+        step_R (act >> ctail r) >>= \r_next ->
+        (k r_next)
+
+    )) phi
+
+
+
+isDone x =
+  case x of
+    (Done _)  -> True
+    (Pause _) -> False
+
+nextOf r =
+  case r of
+    (Pause h) -> step_R(h)
+    (Done a)  -> step_R(return a)
+
+--
+-- essentially, make a pointer to the remainder of 'r':
+--
+ctail :: (R ()) -> (K (R ()))
+ctail r =
+  case r of
+    (Pause x) -> x
+    (Done _)  -> return r
+
+
+--
+-- just any-old imperative code:
+--
+act :: (K ())
+act = get G >>= \n ->
+      put G (n + 1)

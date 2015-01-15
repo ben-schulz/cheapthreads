@@ -1,0 +1,12 @@
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main = (loop_R (\r -> resume_R (fst r) >>= \t -> return (snd r, t))) (phi, psi)
+
+phi :: (R ())
+phi = step_R (return ())
+
+psi :: (R ())
+psi = step_R (return ())

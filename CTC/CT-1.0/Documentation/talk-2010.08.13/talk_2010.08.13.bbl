@@ -1,0 +1,21 @@
+\begin{thebibliography}{1}
+
+\bibitem{ADM_2005}
+Mads~Sig Ager, Olivier Danvy, and Jan Midtgaard.
+\newblock A functional correspondence between monadic evaluators and abstract
+  machines for languages with computational effects.
+\newblock {\em Theor. Comput. Sci.}, 342(1):149--172, 2005.
+
+\bibitem{Palsberg_Ma_2002}
+Jens Palsberg and Di~Ma.
+\newblock A typed interrupt calculus.
+\newblock In {\em FTRTFT '02: Proceedings of the 7th International Symposium on
+  Formal Techniques in Real-Time and Fault-Tolerant Systems}, pages 291--310,
+  London, UK, 2002. Springer-Verlag.
+
+\bibitem{Zdancewic_Meyers_2002}
+Steve Zdancewic and Andrew~C. Myers.
+\newblock Secure information flow via linear continuations.
+\newblock {\em Higher Order Symbol. Comput.}, 15(2-3):209--234, 2002.
+
+\end{thebibliography}

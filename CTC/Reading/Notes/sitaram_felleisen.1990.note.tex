@@ -1,0 +1,159 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[utf8x]{inputenc}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{proof}
+
+%opening
+\title{Notes on ``Reasoning with Continuations II: Full Abstraction for Models of Control'',
+Sitaram and Felleisen (1990)}
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+\end{abstract}
+
+\section{Introduction}
+
+Certain functional languages, namely Scheme and Lisp, use control structures (i.e. continuations)
+for the purpose of labeling control state at some arbitrary point, which allows more elaborate
+program behavior, and facillitates passing results between widely separated control points.\\
+
+Adding control facilities to these languages voids certain reasoning principles, namely observational
+equivalence (as in Riecke 1988); the authors purport to show how to reason even in the presence of
+such control facilities, and how to relate the resulting reasoning system to reasonining in the
+setting of a direct calculus.\\
+
+Operational equivalence as a reasoning tool is necessarily sensitive to language extensions;
+as evidenced by the problems that result from adding the call/cc and abort operators to the usual
+$\lambda_v$ calculus.  The need for a reasoning system that is fully abstract -- which allows
+denotational reasoning, and thus compositionality, and thus induction -- motivates this work.\\
+
+\section{$PCF_v-C$}
+
+$PCF_v-C$ is an extension of call-by-value (CBV) PCF, with control facilities, simple types, ground
+constants, conditionals, and fixpoints.  As is usually the case, $\lambda$-abstractions introduce
+bound variables, with all unbound variables \emph{free}, and terms \emph{closed} whenever they
+contain no free variables.\\
+
+Evaluation proceeds from left to right by searching the argument term for a redex that matches
+the RHS of one of the reduction rules (see Figure 1 in the text), which can be expressed as a 
+grammar of \emph{evaluation contexts}:\\
+
+\[
+ E[] ::= []\ \vert\ V E[]\ \vert\ E[] M
+\]
+
+Note that this grammar succinctly expresses the left-to-right ordering of evaluation, as only values
+($V$) may appear to the left of an $E[]$ and only terms $M$ may appear to the right.\\
+
+Evaluation here directly reflects the reduction rules in its evaluation steps, as:\\
+
+\[
+ M \rightarrow M\prime \implies E[M] \rhd E[M']
+\]
+
+Let $eval(M) = \textsf{b} \iff M \rhd^* \textsf{b}$ denote the function that fully evaluates a term.\\
+\\
+\textbf{Definition (Operational Approximation):} For terms $M : t$ and $N : t$, $M$
+\emph{operationally approximates} $N$, written $M \sqsubseteq_v N$ if for all contexts $C[]$,
+$eval(C[M]) = \textsf{b} \implies eval(C[N]) = \textsf{b}$.  $M$ and $N$ are \emph{operationally
+equivalent}, written $M \equiv_v N$ if $M \sqsubseteq_v N$ and $N \sqsubseteq_v M$.\\
+\\
+\textbf{Example:} Let $M_1 = \lambda f . \Omega$ and $M_2 = \lambda f . f \ulcorner 0 \urcorner \Omega$.
+We wish to argue that $M_1 \equiv_v M_2$.  Let $C[]$ be any enclosing program context.  If $M_1$
+appears in the function position, i.e. instantiates $V$ in the production $V E[]$ as a result of
+evaluation, then clearly $M_2$ will also appear in the function position of the same context.
+When the resulting application term is reduced, following evaluation of the argument, it will
+clearly diverge since:\\
+\[ M_1\ V = (\lambda f . \Omega)\ V = \Omega[f \mapsto V]\]\\
+
+Which clearly diverges.  Similarly,\\
+
+\[M_2\ V = (\lambda f . f\ \ulcorner 0 \urcorner\ \Omega)\ V = (V \ulcorner 0 \urcorner) \Omega \]\\
+
+Which also diverges, since $\Omega$ now appears in the argument position and will thus be evaluated.
+If $M_i$ never appears in the function position in $C[]$, then $\Omega$ will never be evaluated.
+Moreover, since $M_i$ does not appear in the function position, any such $C[]$ that is closed and has
+ground type must be unaffected by substituting $M_i$ for $M_j$, since the program must reduce to
+a ground constant.  (Note that it is important that observational equivalence requires reduction
+to the same ground constant; otherwise $C[] = (\lambda x . x) []$ would distinguish $M_1$ and $M_2$.)
+
+
+\subsection{The Abort Operator}
+
+The first of the extended control structures to be considered is the \emph{abort} operator,
+$\mathcal{A}$.  The behavior of $\mathcal{A}$ is characterized by an additional stepping rule,\\
+\[
+ E[\mathcal{A} M] \rhd M
+\]
+
+Thus, $\mathcal{A}$ causes evaluation to immediately terminate with its argument as a result.
+Let $\equiv_a$ denote observational equivalence in the language PCF+$\mathcal{A}$.\\
+\\
+\textbf{Example:} Let $M_1 = (\lambda f . \Omega)$ and $M_2 = (\lambda f . f \ulcorner 0 \urcorner
+\Omega)$, as in the previous example.  Evaluating in the context $[](\lambda x . \mathcal{A} x)$
+gives:\\
+\[
+ M_1 (\lambda x . \mathcal{A} x) = (\lambda f . \Omega) (\lambda x . \mathcal{A} x) \rhd
+\Omega [f \mapsto (\lambda x . \mathcal{A} x)]
+\]
+\\
+which diverges, and:\\
+\[
+ M_2 (\lambda x . \mathcal{A} x) = (\lambda f . f \ulcorner 0 \urcorner \Omega) (\lambda x .
+\mathcal{A} x) \rhd (\lambda x . \mathcal{A} x) \ulcorner 0 \urcorner \Omega \rhd
+(\mathcal{A} \ulcorner 0 \urcorner) \Omega \rhd \ulcorner 0 \urcorner
+\]
+\\
+demonstrating that $M_1 \not{\equiv_v} M_2$.$\blacksquare$\\
+\\
+This example thus shows that $\equiv_v \nsubseteq \equiv_a$, since observational equivalence
+in PCF$_v$ does not imply observational equivalence in PCF+$\mathcal{A}$.
+
+\subsection{The Call-with-Current-Continuation Operator}
+
+Control can be further extended using the $\mathcal{K}$-expression, which applies its argument
+to an abstraction of the surrounding context (i.e. continuation).  The behavior of $\mathcal{C}$ is
+summarized in the following evaluation rule:\\
+\[
+ E[\mathcal{K} M] \rhd E[M \lambda x . \mathcal{A} E[x]]
+\]
+\\
+\textbf{Example:} Let $M_1$ and $M_2$ be defined as above, and let $C[] = \mathcal{K} (\lambda a . []a)$;
+evaluation of $M_1$ gives:\\
+\[
+ \mathcal{K}(\lambda a . M_1\ a) = \mathcal{K} (\lambda a . (\lambda f . \Omega) a) \rhd
+(\lambda f . \Omega)\ (\lambda x . \mathcal{A} E[x]) \rhd \Omega
+\]
+as before.  Evaluation of $M_2$ gives:\\
+\begin{eqnarray*}
+ \mathcal{K}(\lambda a . M_2\ a) \rhd\\
+(\lambda a . M_2\ a)\ (\lambda x . \mathcal{A} E[x]) \rhd\\
+M_2\ (\lambda x . \mathcal{A} E[x]) =\\
+(\lambda f . f\ \ulcorner 0 \urcorner \Omega) (\lambda x . \mathcal{A} E[x]) \rhd\\
+(\lambda x . \mathcal{A} E[x]) \ulcorner 0 \urcorner \Omega \rhd\\
+(\mathcal{A} E[\ulcorner 0 \urcorner]) \Omega \rhd\\
+ \ulcorner 0 \urcorner\\
+\end{eqnarray*}
+$\blacksquare$\\
+\\
+
+Note that this example is very similar to the preceding one, and that the operational distinction
+between terms comes from the behavior of the abort operator, from which the call/cc operator is
+derived.  The essential behavior to observe is that $\mathcal{C}$ immediately transfers control
+to the evaluation of its argument, and subsequently returns control to the enclosing context with
+the value of $eval(M)$.\\
+\\
+Let $eval_k$ and $\equiv_k$ respectively denote the evaluation function and the operational equivalence
+relation for PCF$_v+\mathcal{K}$.  The preceding example exhibits a context for which two terms
+that are members of $equiv_v$ are not members of $equiv_k$, whence $\equiv_v \nsubseteq \equiv_k$.\\
+\\
+Let PCF$_v-C$ denote the language obtained by extending PCF with both $\mathcal{A}$ and $\mathcal{C}$.
+
+\end{document}

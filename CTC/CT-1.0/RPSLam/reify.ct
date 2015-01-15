@@ -1,0 +1,128 @@
+--
+-- this is ~/cheapthreads/CTC/CT-1.0/TestPrograms/reify.ct
+--
+-- function and data declarations to include when using the reifier;
+--
+-- initially based on declarations in './gc.ct'
+--
+-- put here 2010.06.01
+--
+-- Schulz
+--
+
+monad K = MemT 128 (V) Sto
+        + StackT (Env) Stk
+
+monad R  = ResT K
+monad Re = ReactT Q K
+
+type Name = String
+type Loc  = Int
+
+type Env = [(Name, Loc)]
+
+type Stack = [Env]
+
+signal Q = (Cont, Ack)
+         | (MkCl Loc (Re V), Val1 V)
+         | (App V V, Val2 V)
+         | (LkUp Loc, Val3 V)
+         | (InEnv Env (Re V), InEnvRe V)
+         | (RdEnv, RdEnvRe Env)
+         | (Store V, RspLoc Loc)
+
+data V = Wrong
+       | Error String
+       | Num Int
+       | Cl Name (Re V) Env
+       | Environ Env
+       | Empty
+
+
+
+--
+-- functions assumed by the reifier:
+--
+
+add t1 t2 = case (t1, t2) of
+              (i, j) -> return (Num ((unwrapNum i) + (unwrapNum j)))
+              _      -> return (Error "add")
+
+unwrapNum n = case n of
+                (Num n) -> n
+
+--signalV :: Q -> (Re V)
+signalV q = signal q >>= \rsp ->
+            case rsp of
+              (Val1 v)    -> return v
+              (Val2 v)    -> return v
+              (Val3 v)    -> return v
+              (RdEnvRe e) -> return (Environ e)
+              (InEnvRe v) -> return v
+
+xEnv :: Env -> Name -> Loc -> Env
+xEnv e n l = (n, l):e
+
+
+lkup x bs = case bs of
+              ((y, b):bs) -> if (x == y) then b else (lkup x bs)
+
+
+read :: Loc -> (K V)
+read l = get Sto[l] >>= \v -> return v
+
+
+prj e = case e of
+          (Environ r) -> r
+
+findFreeLoc :: (R Loc)
+findFreeLoc =
+
+  ((fix (\k -> \i ->
+
+    step_R(get Sto[i]) >>= \v ->
+
+    if (v == Empty)
+    then return i
+    else k (i + 1)
+
+    )
+
+  ) 0)
+
+writeLoc :: Loc -> V -> (K ())
+writeLoc l v = put Sto[l] v >> return ()
+
+store :: V -> (R Loc)
+store v = findFreeLoc >>= \l -> step_R(writeLoc l v >> return l)
+
+
+appEnvRe :: Name -> (Re V)
+appEnvRe x = (signalV RdEnv) >>= \rho -> step_Re(read(lkup x (prj rho)))
+
+
+hand :: Stack -> (Re V) -> (R (Re V))
+hand stk r = case r of
+               (D v)                    -> return (return v)
+               (P (Cont, r))            -> step_R (r Ack)
+
+               (P ((InEnv rho phi), r)) -> go (rho:stk) phi >>= \t ->
+                                           step_R (r (InEnvRe t))
+
+               (P (RdEnv, r))           -> step_R (r (RdEnvRe (head stk)))
+                                           
+
+               (P (Store v, r))         -> store v >>= \l ->
+                                           step_R(r (RspLoc l))
+
+
+go :: Stack -> (Re V) -> (R V)
+go stk re = case re of
+              (D v) -> return v
+              _     -> hand stk re >>= \nxt -> go stk nxt
+
+head xs = case xs of
+            (x:_) -> x
+
+
+-- END OF REIFIER HEADER --

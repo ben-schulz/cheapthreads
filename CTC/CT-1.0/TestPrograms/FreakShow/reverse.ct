@@ -1,0 +1,31 @@
+
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main :: (R Int) -> (R Int)
+main phi =
+
+    (fix (\k -> \x ->
+    
+
+      if (isDone x)
+      then x
+      else
+        (nextOf x) >>= \r_next ->
+        (k r_next) >> r_next        -- is this 'phi' run in reverse?
+
+    )) phi
+
+
+
+isDone x =
+  case x of
+    (Done _)  -> True
+    (Pause _) -> False
+
+nextOf r =
+  case r of
+    (Pause x) -> step_R x
+    (Done a)  -> step_R (return a)

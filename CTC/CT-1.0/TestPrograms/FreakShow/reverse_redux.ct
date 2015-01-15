@@ -1,0 +1,39 @@
+
+--
+-- Can something like this be used to "speculatively run" a thread?
+-- Thread deconstruction and execution look-ahead appear inseparable;
+-- can this be used to dynamically catch and detect faults?
+--
+
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main :: (R ()) -> (R ())
+main phi =
+
+    (fix (\k -> \x ->
+    
+
+      if (isDone x)
+      then x
+      else
+
+        (nextOf x) >>= \r_next ->
+        (k r_next) >> (nextof x) >>   -- this creates a palindrome of 'phi'
+        return ()
+
+    )) phi
+
+
+
+isDone x =
+  case x of
+    (Done _)  -> True
+    (Pause _) -> False
+
+nextOf r =
+  case r of
+    (Pause h) -> step_R h
+    (Done a)  -> step_R (return a)

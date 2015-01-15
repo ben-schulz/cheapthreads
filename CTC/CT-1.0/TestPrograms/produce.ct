@@ -1,0 +1,48 @@
+--
+-- this is ~/cheapthreads/CTC/CT-1.0/TestPrograms/producer.ct
+--
+-- the producer half to a simple producer-consumer example
+--
+
+monad K = StateT (Int) Addr +
+          MemT 128 (Int) Box
+
+signal Q = (Msg Int, OK)
+         | (IsValid, Valid Bool)
+
+monad Re = ReactT Q K
+
+
+main :: Re ()
+main =
+
+  step_Re(put Addr 0) >>
+
+  (
+    fix
+    (\k -> \nothing ->
+
+      -- check whether consumer is ready for more data:
+      signal IsValid >>= \valid ->
+
+      if valid
+      then
+
+        step_Re(
+          get Addr >>= \i ->
+          get Box[i] >>= \msg ->
+          put Addr (if i < 128 then i + 1 else 0) >>
+          return msg
+        ) >>= \msg -> 
+
+        signal (Msg msg) >>
+
+        k ()
+
+      -- otherwise, busy wait
+      else
+        k ()
+    )
+
+  ) ()
+  

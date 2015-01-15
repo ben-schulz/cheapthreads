@@ -1,0 +1,206 @@
+monad CM = EnvT(CtsSrcPos) SrcPos + EnvT(FunTab) FunTab + EnvT(MonadEnv) MonadEnv + EnvT(MonadStateEnv) MonadStateEnv + EnvT(BindEnv) BindEnv + EnvT(DTTab) DTTab + StateT(Int) LabelCount + EnvT(Maybe Kappa) Kappa
+
+--
+-- NOTE: Due to a limitation in MonadLab you will have to take the output
+-- CM.hs and change this line:
+--
+--     module CM where
+--
+-- to:
+--
+--     module CT.Compiler.CM where
+--
+
+import CT.Syntax
+import CT.Compiler.ThreeAddressCode
+import Data.Maybe
+import Data.List
+
+------------------
+------------------
+-- Symbol table --
+------------------
+------------------
+
+type FunTab     = [FunSpec]
+
+data FunSpec    = FunSpec {
+   funSpecName     :: CtsIdent,
+   funSpecArgNames :: [CtsIdent],
+   funSpecArgTys   :: [CtsType],
+   funSpecRetTy    :: CtsType,
+   funSpecBody     :: CtsExpr
+}
+
+
+--------------------------
+--------------------------
+-- Monad specifications --
+--------------------------
+--------------------------
+type MonadEnv = [MonadNPM]
+
+data MonadNPM = MonadStep {
+                   monadStepBaseMonad     :: CtsIdent,
+                   monadStepResultMonad   :: CtsIdent
+                }
+              | MonadGet {
+                   monadGetMonad          :: CtsIdent,
+                   monadGetStateName      :: CtsIdent,
+                   monadGetStateType      :: CtsType
+                }
+              | MonadPut {
+                   monadPutMonad          :: CtsIdent,
+                   monadPutStateName      :: CtsIdent,
+                   monadPutStateType      :: CtsType
+                }
+              | MonadReadHeap {
+                   monadReadHeapMonad     :: CtsIdent,
+                   monadReadHeapName      :: CtsIdent
+                }
+              | MonadStoreHeap {
+                   monadStoreHeapMonad    :: CtsIdent,
+                   monadStoreHeapName     :: CtsIdent
+                }
+              | MonadGetreq {
+                   monadGetreqMonad       :: CtsIdent,
+                   monadGetreqResultMonad :: CtsIdent,
+                   monadGetreqReqType     :: CtsType
+                }
+              | MonadIsDone {
+                   monadIsDoneMonad       :: CtsIdent,
+                   monadIsDoneResultMonad :: CtsIdent
+                }
+              | MonadPutrsp {
+                   monadPutrspMonad       :: CtsIdent,
+                   monadPutrspResultMonad :: CtsIdent,
+                   monadPutrspRspType     :: CtsType
+                }
+              | MonadSignal {
+                   monadSignalMonad       :: CtsIdent,
+                   monadSignalReqType     :: CtsType,
+                   monadSignalRspType     :: CtsType
+                }
+              deriving Show
+
+type MonadStateEnv = [((CtsIdent,CtsIdent),Register)]
+        
+------------------------------
+------------------------------
+-- Data type specifications --
+------------------------------
+------------------------------
+
+type DTTab      = [DTSpec]
+
+data DTSpec     = DTSpec {
+   dtSpecName     :: CtsIdent,
+   dtSpecConSpecs :: [ConSpec]
+} deriving Show
+
+data ConSpec    = ConSpec {
+   conSpecName :: CtsIdent,
+   conSpecTys  :: [CtsType]
+} deriving Show
+
+----------------------------------
+----------------------------------
+-- "Kappa" context for fixpoint --
+----------------------------------
+----------------------------------
+data Kappa = Kappa {
+   kappaName   :: CtsIdent,
+   kappaSpSave :: Register,
+   kappaLabel  :: Label,
+   kappaRegs   :: [Register]
+} deriving Show
+
+--                                        --
+-- Miscellaneous support functions follow --
+--                                        --
+
+-- Seems weird that there's no prelude function for this
+lookupBy :: (Eq b) => (a -> b) -> b -> [a] -> Maybe a
+lookupBy f k xs = lookup k [(f x,x) | x <- xs]
+
+-- Maps a data constructor to its tag
+getCtorTag :: CtsIdent -> CM Int
+getCtorTag ident = do
+                      dttab  <- rdDTTabCM
+                      
+                      let dt =  fromMaybe (error $ "undefined constructor " ++ ident)
+                                          (find (elem ident . map conSpecName . dtSpecConSpecs) dttab)
+                      
+                      let t  =  fromJust $ elemIndex ident (map conSpecName (dtSpecConSpecs dt))
+                                         
+                      return t
+
+-- Maps a type constructor to its data type specification
+getDTSpec :: CtsIdent -> CM DTSpec
+getDTSpec name = do
+                    dttab  <- rdDTTabCM
+                    let sp =  fromMaybe (error $ "undefined data type " ++ name)
+                                        (lookupBy dtSpecName name dttab)
+
+                    return sp
+       
+-- Maps a data constructor to its constructor specification
+getConSpec :: CtsIdent -> CM ConSpec
+getConSpec name = do
+                     dttab           <- rdDTTabCM
+                     
+                     let allconspecs =  concatMap dtSpecConSpecs dttab
+                     let cs          =  fromMaybe (error $ "undefined constructor " ++ name)
+                                                  (lookupBy conSpecName name allconspecs)
+                                               
+                     return cs
+
+-- Maps a data constructor to its data type specification
+getDTSpecByCtor :: CtsIdent -> CM DTSpec
+getDTSpecByCtor name = do
+                          dttab      <- rdDTTabCM
+                          
+                          let dtHasCtor :: DTSpec -> Bool
+                              dtHasCtor dt = any (==name) (map conSpecName (dtSpecConSpecs dt))
+
+                          let dtspec    =  fromMaybe (error $ "undefined constructor " ++ name)
+                                                     (find dtHasCtor dttab)
+
+                          return dtspec
+
+-- Maps a function name to its function specification
+getFunSpec :: CtsIdent -> CM FunSpec
+getFunSpec name = do
+                     funtab  <- rdFunTabCM
+
+                     let tsp =  fromMaybe (error $ "No type signature for function " ++ name)
+                                          (lookupBy funSpecName name funtab)
+                                           
+                     return tsp
+
+--------------------
+--------------------
+-- Local bindings --
+--------------------
+--------------------
+
+type BindEnv = [Binding]
+
+data Binding    = Binding {
+   bindingName :: CtsIdent,
+   bindingTy   :: CtsType,
+   bindingReg  :: Register
+} deriving Show
+
+
+---------------------------------------
+---------------------------------------
+-- Generating fresh labels/registers --
+---------------------------------------
+---------------------------------------
+
+freshNumCM :: CM Int
+freshNumCM = do
+                lc <- getLabelCountCM
+                putLabelCountCM (lc+1)
+                return lc

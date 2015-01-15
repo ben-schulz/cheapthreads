@@ -1,0 +1,99 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{proof}
+
+\title{}
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\begin{abstract}
+
+To answer your question, yes we still amaze, rock, shock and put the whole
+block in a daze.  Quit bein sarcastic, you're bein a mess.  Quit poppin that
+junk -- we got your address.
+
+\end{abstract}
+
+\section{Source Language}
+
+\subsection{Types}
+\begin{tabular}[t]{lll}
+
+ $\kappa$ &::=& $(r, ir)$\\
+ $t$ &::=& \texttt{unit} $\vert$ \texttt{bool} $\vert$ \texttt{nat} $\vert$
+           $(s + s)$ $\vert$
+           $(s \times s)$ $\vert$ $(s \rightarrow_{ir} s)$
+           $\vert$ \texttt{ref} $s$\\
+ $s$ &::=& ($t$, $\kappa$)\\
+\end{tabular}
+
+Here, $r$ and $ir$ are members of a lattice of security levels, indicating
+the \emph{reader} and \emph{indirect reader} privileges.  All terms have
+both a \emph{value} type and a \emph{security type}, as reflected in the
+mutual recursion between $t$ and $s$.  Functions may be side-effecting; the
+permission level of these side-effects is indicated by the subscript. Mutable
+reference types are indicated by \texttt{ref}, with the argument indicating
+type of the referent.
+
+\subsection{Values}
+
+
+\begin{tabular}[t]{lll}
+ $V\prime$ &::=& \texttt{()} $\vert$ (\texttt{inj}$_i$ $V$) $\vert$
+                 $\langle V , V \rangle$
+                 $\vert$ $(\lambda (x : s) . E)$
+                 $l^s$\\
+ $V$ &::=& $V\prime_\kappa$\\
+\end{tabular}
+
+Functions are first-class, and thus \emph{values} are mutually recursive with
+\emph{terms}, defined below.  Reference cells are denoted by $l$, and must
+be given an explicit type and explicit permissions, as indicated by the
+superscript $s$.
+
+\subsection{Terms}
+
+\begin{tabular}[t]{lll}
+
+ $E$ &::=& $x$ $\vert$ $V$ $\vert$ (\texttt{inj}$_i$ $E$)$_\kappa$ $\vert$
+           $\langle E , E  \rangle_\kappa$ $\vert$ ($E$ $E$) $\vert$
+           (\texttt{proj}$_i$ $E$)$_r$ $\vert$\\
+           &&(\texttt{protect}$_{ir}$ $E$) $\vert$
+           ($\mu (f : s) . E$)) $\vert$ \\
+           &&(\texttt{case} $E$ \texttt{of}
+            \texttt{inj}$_1$(x) . $E$ $\vert$ \texttt{inj}$_2$(x) . $E$)$_r$\\
+           &&(\texttt{ref$_s$ $E$})$_{\kappa}$ $\vert$ ($E$ := $E$)$_r$ $\vert$
+           (!$E$)$_r$ $\vert$\\
+
+\end{tabular}
+
+\section{Intermediate Language 1: CT-HASK}
+
+\subsection{Language of Threads: Reactivity}
+
+\begin{tabular}[t]{lll}
+ 
+$T$ &::=& $A\ \star\ \lambda x . T$ $\vert$
+          $A \gg$  $T$
+          $\vert$ \texttt{if} $X$ \texttt{then} $M$ \texttt{else} $M$\\
+
+$A$ &::=& $\eta\ X\ \vert $ \texttt{signal} $Q$\\
+\\
+
+$Q$ &::=& $\texttt{apply}\ X\ X$ $\vert$ \texttt{mkcl} $x\ T\ \vert$
+          \texttt{mkreccl} $x\ T\ \vert$ \texttt{lkp} $x$\\
+\\
+$X$ &::=& $C\ \vert\ x\ \vert $ \texttt{inc} $X\ \vert $
+          \texttt{dec} $X\ \vert X$ \texttt{==} $X$\\
+          &&$\vert $ \texttt{isnum}\ $X \vert $ \texttt{isbool}\ $X \vert$
+          \texttt{iscl}\ $X \vert $ \texttt{isreccl}\ $X$\\
+          &&$\vert$ \textbf{cl} $<x, \rho, T> \vert $
+          \textbf{reccl} $<x, \rho, T>$\\
+
+$C$ &::=& 0 $\vert$ 1 $\vert$ ... $\vert$ \textbf{false} $\vert$ \textbf{true} 
+
+\end{tabular}
+
+\end{document}

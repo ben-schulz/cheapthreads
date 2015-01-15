@@ -1,0 +1,148 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{proof}
+
+\newcommand{\compile}[2]{\lceil #2 \rceil_{#1}}
+\newcommand{\atom}[1]{\texttt{atom\{ #1 \}}}
+\newcommand{\throw}[1]{\texttt{throw\{ #1 \}}}
+\newcommand{\nullbind}[0]{\gg}
+
+\begin{document}
+
+\section{First Intermediate Phase: CT $\rightarrow$ RSI}
+
+\subsection{Compilation of the State Monad}
+
+\begin{tabular}[t]{llll}
+
+$\compile{K}{k \star_K k\prime}$ &=& $\compile{K}{k}\texttt{;} \compile{K}{k\prime}$ &\emph{(bind)}\\
+\\
+$\compile{K}{k \nullbind_K k\prime}$ &=& $\compile{K}{k}\texttt{;} \compile{K}{k\prime}$ &\emph{(null-bind)}\\
+\\
+$\compile{K}{\eta_K\ e}$ &=& \texttt{r\_ret :=} $eval(\compile{Id}{e})$&\emph{(return)}\\
+\\
+$\compile{K}{\lambda x.\ k}$ &=& \texttt{x := r\_ret;} $\compile{K}{k}$ &\emph{(lambda binding)}\\
+\\
+$\compile{K}{get_g}$ &=& \texttt{r\_ret := g} &\emph{(get morphism)}\\
+\\
+$\compile{K}{put_g\ e}$ &=& \texttt{g := $\compile{Id}{e}$; clr r\_ret} &\emph{(put morphism)}\\
+\\
+$\compile{K}{f}$ &=& $\compile{K}{\rho(f)}$ &\emph{(declared action)}\\
+\\
+$\compile{K}{(\lambda x.k)\ v}$ &=& \texttt{x := $eval(\compile{any}{v})$;} $\compile{K}{k}$ &\emph{(function application)}\\
+\\
+
+\end{tabular}
+
+\subsection{Compilation of the Resumption Monad}
+
+\begin{tabular}[t]{lllll}
+$\compile{R}{r \star_R \lambda x.\ r\prime}$ &=& $\compile{R}{r}$\texttt{; L: \atom{x := r\_ret};} $\compile{R}{r\prime}$ &\emph{(bind)}\\
+\\
+$\compile{R}{r \nullbind r\prime}$ &=& $\compile{R}{r}$\texttt{;} $\compile{R}{r\prime}$&\emph{(null-bind)}\\
+\\
+$\compile{R}{\eta_R\ e}$ &=& \texttt{L: }\atom{\texttt{r\_ret := }$eval(\compile{Id}{e})$}&\emph{(return)}\\
+\\
+$\compile{R}{resume_{R}\ r}$ &=& \texttt{L0: swr }$\compile{R}{r}$\texttt{; L1: atom\{r\_ret := r\_nxt\}}&\emph{(resume)}\\
+\\
+$\compile{R}{resume_{Re}\ r\ p}$ &=& \texttt{L0:} \atom{r\_ret := $\compile{Id}{p}$}\texttt{;}\\
+&&\texttt{L1: swt }$\compile{Re}{r}$; \texttt{ L2: }\atom{ r\_ret := r\_nxt}&\emph{(reactive resume)}\\
+\\
+$\compile{R}{step\ k}$ &=& \texttt{L0: }\atom{$\compile{K}{k}$; r\_nxt := L1}\texttt{ L1: nop}&\emph{(resumptive step)}\\
+\\
+$\compile{R}{if\ b\ then\ r\ else\ r\prime}$ &=& \texttt{L: bz }$eval(\compile{Id}{b})$ $\compile{R}{r}\ \compile{R}{r\prime}$&\emph{(resumptive branch)}\\
+\\
+$\compile{R}{loop_R\ (\lambda x.r)}$ &=& \texttt{L0: loop \{}$\compile{R}{r}$\texttt{; L1: }\atom{x := r\_ret}\texttt{\}}&\emph{(resumptive loop)}\\
+\\
+$\compile{R}{(loop_R (\lambda x.r)) e}$ &=& \texttt{L0: }\atom{x := $eval(\compile{any}{e})$}\texttt{; }$\compile{R}{loop_R (\lambda x.r)}$&\emph{(loop initialization)}\\
+\\
+$\compile{R}{break\ v}$ &=& \texttt{L: break $eval(\compile{Id}{v})$}&\emph{(loop break-out)}\\
+\\
+$\compile{K}{f}$ &=& $\compile{R}{\rho(f)}$ &\emph{(declared action)}\\
+\\
+$\compile{K}{f}$ &=& \texttt{L: jmp }$\mu(f)$ &\emph{(bound variable)}\\
+\\
+\end{tabular}
+
+\subsection{Compilation of the Reactive Resumption Monad}
+
+\begin{tabular}{lllll}
+
+$\compile{Re}{signal\ q \star_Re \lambda x.r\prime}$ &=& \texttt{L0: }\throw{r\_nxt := L1; r\_req := $eval(\compile{Id}{q})$}\texttt{;}\\
+&&\texttt{L1: catch x; }$\compile{Re}{r\prime}$ &\emph{(bind-with-signal)}\\
+\\
+$\compile{Re}{r \star_{Re} \lambda x.\ r\prime}$ &=& $\compile{Re}{r}$\texttt{; L: \atom{x := r\_ret};} $\compile{Re}{r\prime}$ &\emph{(bind)}\\
+\\
+$\compile{Re}{signal\ q \nullbind_{Re} r\prime}$ &=& \texttt{L0: }\throw{r\_nxt := L1; r\_req := $eval(\compile{Id}{q})$}\texttt{;}\\
+&&\texttt{L1: catch r\_ret; }$\compile{Re}{r\prime}$ &\emph{(write-only signal)}\\
+\\
+$\compile{Re}{r \nullbind r\prime}$ &=& $\compile{Re}{r}$\texttt{; } $\compile{Re}{r\prime}$ &\emph{(null-bind)}\\
+\\
+$\compile{Re}{\eta_{Re}\ e}$ &=& \texttt{L: }\atom{r\_ret := $eval(\compile{Id}{e})$} &\emph{(return)}\\
+\\
+$\compile{Re}{step\ k}$ &=& \texttt{L0: }\throw{r\_nxt := L1; clr r\_req}\texttt{;}\\
+&&\texttt{L1:  }\atom{$\compile{K}{k}$; r\_nxt := L2}\texttt{; L2: nop}&\emph{(reactive step)}\\
+\\
+$\compile{Re}{signal\ q}$ &=& \texttt{L0: }\throw{r\_nxt := L1; r\_req := $eval(\compile{Id}{q})$}\texttt{;}\\
+&&\texttt{L1: }\atom{nop}&\emph{(terminal signal)}\\
+\\
+$\compile{Re}{if\ b\ then\ r\ else\ r\prime}$ &=& \texttt{L0: }\throw{clr r\_req}\texttt{;}\\
+&&\texttt{L1: bz }$eval(\compile{Id}{b})$ $\compile{Re}{r}\ \compile{Re}{r\prime}$&\emph{(reactive branch)}\\
+\\
+$\compile{Re}{loop_{Re}\ (\lambda x.r)}$ &=& \texttt{L: loop \{ }$\compile{Re}{r}$\texttt{; \atom{x := r\_ret}}\texttt{ \} }&\emph{(reactive loop)}\\
+\\
+$\compile{Re}{(loop_{Re} (\lambda x.r))\ e}$ &=& \throw{r\_nxt := L1; clr r\_req}\texttt{;}\\
+&&\texttt{L1: }\atom{x := $eval(\compile{any}{e})$}\texttt{; }$\compile{Re}{loop_{Re} (\lambda x.r)}$&\emph{(loop initialization)}\\
+\\
+$\compile{Re}{break\ v}$ &=& \texttt{L: break $eval(\compile{Id}{v})$}&\emph{(loop break-out)}\\
+\\
+
+
+\end{tabular}
+
+\section{Intermediate Branches: RSI $\rightarrow$ RSI$_{I}$}
+
+\subsection{Interrupt-Based Implementation: RSI $\rightarrow$ RSI$_{imr}$}
+
+\begin{tabular}[t]{llll}
+$\compile{imr}{\texttt{L: atom\{}k\}}$ &=& \texttt{L: clr imr; } $k$\texttt{; set imr;} &\emph{(nondet interrupt)}\\
+\\
+$\compile{imr}{\texttt{L: throw\{}k\}}$ &=& \texttt{L\_MASK: bz inr L L\_TERM;}\\
+&&\texttt{L: clr imr; } $k$\texttt{; set imr;}\\
+&&\texttt{L\_TERM: nop} &\emph{(system call)}\\
+\\
+$\compile{imr}{\texttt{L0: }A\texttt{; L1: }S}$ &=& \texttt{L0: r\_nxt := L1; }$\compile{imr}{A}$\texttt{; L1: }$\compile{imr}{S}$ &\emph{(sequence)}\\
+\\
+$\compile{imr}{\texttt{L: bz }X\ C\ C\prime\ T}$ &=& \texttt{L: L0: clr imr; tst }$X$\texttt{;}\\
+&&\texttt{bz r\_z L2 L1;}\\
+&&\texttt{L1: r\_nxt := }$\mu(C)$\texttt{; jmp L3;}\\
+&&\texttt{L2: r\_nxt := }$\mu(C\prime)$\texttt{; jmp L3;}\\
+&&\texttt{L3: set imr;}\\
+&&\texttt{jmp r\_nxt;}\\
+&&$\compile{imr}{C}$\texttt{; jmp }$\mu(T)$\texttt{; }\\
+&&$\compile{imr}{C\prime}$\texttt{; jmp }$\mu(T)$\texttt{; }$\compile{imr}{T}$ &\emph{(branch on zero)}\\
+\\
+$\compile{imr}{\texttt{L: loop }C\ C\prime}$ &=& \texttt{L: loop } $\compile{imr}{C}$ $\compile{imr}{C\prime}$ &\emph{(loop)}\\
+\\
+$\compile{imr}{\texttt{L: break }v}$ &=& \texttt{L: break }$v$ &\emph{(break)}\\
+\\
+$\compile{imr}{\texttt{L: swr }X\ T}$ &=& \texttt{L: clr imr; set inr;}\\
+&&\texttt{swr X;}\\
+&&\texttt{clr inr;}\\
+&&\texttt{r\_ret := r\_nxt;}\\
+&&\texttt{r\_nxt := L; }$\compile{imr}{T}$&\emph{(non-reactive switch)}\\
+\\
+$\compile{imr}{\texttt{L: swt }X\ T}$ &=& $\compile{imr}{\texttt{L: swr }X\ T}$&\emph{(reactive switch)}\\
+\\
+$\compile{imr}{\texttt{L: catch }X\ C}$ &=& \texttt{L: clr imr;}\\
+&&$X$\texttt{ := r\_ret;}\\
+&&$\compile{imr}{C}$&\emph{(response catch)}\\
+\\
+$\compile{imr}{\texttt{L: jmp }X}$ &=& \texttt{L: jmp }$X$&\emph{(jump)}\\
+\\
+$\compile{imr}{\texttt{L: halt}}$ &=& \texttt{L: halt}&\emph{(stream termination)}\\
+
+\end{tabular}
+
+\end{document}

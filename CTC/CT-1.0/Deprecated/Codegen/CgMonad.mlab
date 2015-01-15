@@ -1,0 +1,7 @@
+import ETIC.Syntax
+
+monad Cg   = EnvT([Ident]) Apps + EnvT(EnvSto) EMap + StateT([TopDecl]) GDecls + StateT(DeclMap) FDecls + Io
+
+type Ident = String
+type DeclMap = [(Ident,VarDecl)]
+type EnvSto = [(Ident, Ident)]

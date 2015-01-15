@@ -1,0 +1,321 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[utf8x]{inputenc}
+
+\usepackage{amsmath}
+\usepackage{proof}
+
+%opening
+\title{Notes on "Cryptographic Protocol Synthesis and Verification for Multiparty Sessions",
+by Bhargavan, Corin, Denielou, Fournet, and Leifer (2009)}
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+\end{abstract}
+
+\section{Motivation: Compilation and Static Typing for Security}
+
+Widely available protocols for encrypted communication operate a lower level than application programming.
+As such, they are perfectly suitable for messages exchanged only between two URLs or IP addresses,
+but problematic for applications programming, where information may be passed among multiple parties,
+e.g. intermediate gateways, web servers.\\
+
+The authors present a language for specifying multiparty sessions.  Control flow is given by asynchronous
+message passing and includes a shared store with access controls.  This framework is applied to the
+task for reasoning about security properties of the sessions.\\
+
+An important object of this approach is to hide cryptographic security measures from the
+application-level programmer, which gives the appearance of a single, uniform protocol to all
+participants in the communication.\\
+
+Informally, define \emph{compromised principals} as those whose keys are known to an adversary;
+these may be malicious principals, or principals whose keys have been leaked.  All other principals
+are called \emph{compliant}.  The security goal is to protect compliant principals from compromised
+principals.  The authors verify automatically generated protocols by generalizing over security
+properties of all runs.  (Note similarity to the trace methods we are already familiar with,
+as in the various non-interference arguments.)\\
+
+\subsection{Possible Future Work:}
+Verify something similar to the session compiler presented in this paper using Coq.\\
+\\
+\subsection{Possible Future Work:}
+Address questions such as liveness, resistance to traffic analysis, or DoS attacks.\\
+\\
+\subsection{Related Work:} See the paper for complete list, but note that virtually all of the related work
+on this subject has been done in the last ten years, and most of that in the last five.
+
+
+\section{Multiparty Sessions}
+
+It is useful to consider sessions as directed graphs.  Each node corresponds to a principal,
+and each edge corresponds to a message from its source to its destination node.  Nodes are labeled
+with their role, either \textsf{c} for client or \textsf{w} for web service.  Edges are labeled
+according to particular signals, e.g. \textsf{Request}, \textsf{Ack} or \textsf{Fault}.\\
+
+Assume that each participant has its own local implementation and application code that handles the
+sending and receiving of messages.\\
+
+Sessions specify the pattern of a communication; execution consists of a walk of the session graph.
+Execution terminates on reaching a node with no outgoing edges.\\
+
+Graphs may contain a cycle, e.g. repeated request-retry messages.  Note that it is also important that
+each session execution only has a single token; the set of permissible graphs thus excludes all graphs
+containing a branch with a set of roles that is not a subset of its predecessors.  In essence, this
+feature models a restriction on session information escaping from the parties expressly involved
+by the specification.\\
+
+Access control is imposed by static typing of a finite set of session variables.  In the graph
+model, variables are written by the outgoing (source) edge and read by the incoming (destination) edge.
+It should thus be straightforward to specify behaviors in a standard way, e.g. as a Hoare triple.
+In particular, this specification is used to specify which variables may be examined or modified
+by a given participant at a given stage of the communication.\\
+
+\emph{Roles} are a special class of variables assigned to principals of the communication.
+For instance, a particular message from A may have a final destination of C by way of B, so that
+$A \mapsto \textsf{c}$, $B \mapsto \textsf{p}$, and $C \mapsto \textsf{w}$.  It is important to
+assume that role variables are written only once, and must have been read by all principals involved
+in the session before sending any message to a new participant.  Note that role assignments may
+occur dynamically, i.e. may be filled out by as the execution progresses.  For instance, a proxy
+may choose the final destination server, and thus be responsible for choosing a \textsf{w}.\\
+
+By way of example, the authors indicate that their compiler should never allow a session wherein
+a proxy directly forwards a request to any server of its choice.  The reasoning is that a compromised
+proxy might pass the request to multiple servers and select among the replies.
+
+\subsection{Formal Development}
+
+A \emph{session graph} is a tuple:\\
+
+\[
+ G = (\mathcal{R}, \mathcal{V}, \mathcal{X}, \mathcal{L}, m_0 \in \mathcal{V}, \mathcal{E},
+  R : \mathcal{V} \rightarrow \mathcal {R})
+\]
+
+where $\mathcal{R}$ is a finite set of roles; $\mathcal{V}$ is a finite set of vertices (nodes);
+$\mathcal{X} = \mathcal{X}_{\textsf{d}} \uplus \mathcal{R}$, the disjoint union of data variables
+$\mathcal{X}_\textsf{d}$ and roles $\mathcal{R}$; a set of distinct labels $\mathcal{L}$; an initial state node $m_0$,
+and a set of labeled edges $(m, \tilde{x}, f, \tilde{y}, m\prime) \in \mathcal{E} \subseteq$
+$ \mathcal{V} \times \mathcal{X}^* \times \mathcal{L} \times \mathcal{X}^* \times \mathcal{V}$, where
+$\tilde{X}$ denotes a vector $(x_0 \cdots x_k)$, and where each variable occurs no more than once
+in each of $\tilde{x}$ and $\tilde{y}$ (necessary for state to be well-defined); and $R$ maps nodes
+to their roles in the current communication.\\
+
+Edges are uniquely identified by their labels.  For an edge $(m, \tilde{x}, f, \tilde{y}, m\prime)$,
+read and written variables are specifed by their position in the tuple, i.e. such that
+$\textsf{write}(f) = \tilde{x}$ and $\textsf{read}(f) = \tilde{y}$.  Similar, the \emph{source}
+and \emph{target} roles of the edge with label $f$ are defined as $\textsf{src}(f) = R(m)$ and
+$\textsf{tgt}(f) = R(m\prime)$.\\
+
+Let $\hat{f}$ denote an \emph{extended path}, which is path through the graph annotated with vectors
+of variables, as $(\tilde{x_0}) f_0 \cdots (\tilde{x_k}) f_k$.\\
+
+\section{The Session Programming Model}
+
+In outline, the session specification is written as a description in a specification language, which
+is compiled to generate a library module that implements cryptographic communications.  The resulting
+code is verified by a static type checker.  Application code for each role is then written for each
+distinct role.  Trusted, i.e. compliant principals use code thus produced; untrusted i.e. compromised
+principals may also participate, however, using their own application code.\\
+
+Informally, sessions are specified in a syntax that reflects the formal definition, that is, that
+specifies variables, roles, etc.  Roles specify an internal choice (which will appear non-deterministic
+to other participants) of messages to send, and an external choice (which will appear non-deterministic
+to the noe itself) of replies that may arrive.  The authors present a syntax that is local to nodes,
+but note that this is not incompatible with a global specification.  Note that the resulting
+session graph is subject to certain well-formedness constraints.\\
+
+The protocol module generated by the presented tool exports functions for each role, with each
+function implementing the corresponding role process of sends and receives.  This function takes
+the identifying informaion of the running principal as its argument (e.g. IP address, crypto keys).\\
+
+\emph{Here's the interesting part: the role function is written in a continuation-passing style
+which allows the application to bind variables and choose among messages in each state.}\\
+
+\subsection{Type Checking}
+
+Application code that is well-typed (according to an ordinary ML typing -- which should includes
+the necessary type definitions) when incorporating the generated protocol module(s) is guaranteed
+to comply with session discipline.  This does not preclude attacks by compromised principals; thus,
+sessions are encrypted to ensure global session integrity, even in the presence of attempts by
+adversaries to alter the session data.\\
+
+To ensure that cryptographic obligations are met, the session graph is encoded as a series of logical
+pre- and post-conditions on Tx/Rx actions by the protocol functions.  The authors use ML, extended
+with refinement types; the resulting program is checked by a custom typechecker that invokes an
+automated theorem prover.
+
+\subsection{Possible Project:} Do this in Coq.\\
+
+
+\section{Formal Statement: Session Integrity}
+
+The main security theorem quantifies over all messages sent and received by compliant principals
+during session execution, in terms of events emitted by the implementation:\\
+\\
+\textbf{Informal Thorem (Session Integrity):} All send (Tx) and receive (Rx) events emitted by
+the implementation will correspond to correct session traces in all possible environments of
+compromised principals.\\
+\\
+Let a verified $\tilde{S}$-system consist of the following modules:\\
+\[
+ Data, Net, Crypto, Prins, (S_i\_protocol)^{1 \le i \le k}, U
+\]
+\\
+where $Data$, $Net$, and $Crypto$ are symbolic implementations of trusted libraries; $Data$ operates
+on byte arrays and strings, and $Net$ performs networking operations.  $Crypto$ (obviously) handles
+cryptogrpahic operations, and $Prins$ assigns cryptographic keys to principals.  $S_i\_protocol$ is
+a verified module generated by the authors' compiler from a session description $S_i$; it is
+typechecked against its refined type interfaces and those of the libraries.  $U$ denotes application
+code, which may be the code run by an adversary.  For the purposes of this paper, assume it to be
+arbitrary ML code, with access to any and all functions exported by the modules above, and to some
+of the keys in $Prins$.\\
+
+\subsection{Exercise:} Look up the definition of a \emph{Dolev-Yao adversary} and explain its
+relevance to this model.\\
+\\
+\subsection{Moving Right Along ...}
+The adversary U may instantiate any of the roles in the session, may intercept, modify, or send messages
+on public channels, or perform cryptographic computations.  It is assumed, however, that U cannot
+break the cryptography or guess secrets belonging to compliant principals.\\
+A run on the $\tilde{S}$-system is a sequence of events logged during the execution of the system.
+For each session, define three kinds of observable events:\\
+\[
+ Tx(f, a, \tilde{v}), Rx(f, a, \tilde{v}), Lx(a)
+\]
+respectively, send, receive and leak, where $f$ ranges over the session labels.  $Tx(f, a, \tilde{v})$
+asserts that, in some possible run, principal $a$, acting in the source role of edge $f$ commits
+to send a message labeled as $f$ with values $\tilde{v}$ as its written variables.
+$Rx(f, a, \tilde{v})$ asserts that $a$, acting in the target role of $f$ and after examining the
+cryptographic evidence, accepts a message $f$ with read variables $tilde{v}$.  $Lx(a)$ asserts
+that $a$ has been compromised, which occurs when $U$ demands a key from $Prins$.  In a run where the
+principal's keys are never accessed by $U$, $Lx$ should never occur, and the principal should be
+considered compliant.  For a given run, a compliant event is a $Tx$ or $Rx$ whose first argument
+has not been compromised by a $Rx$.\\
+
+A \emph{session trace} is a sequence of $Tx$ and $Rx$ obtained by globally instantiating all bound
+variables in a path through the session whose initial node is $m_0$.  Formally,\\
+\\
+\textbf{Definition (Session Trace):} The traces of a session $S$ are constructed as follows:
+Denote $f_1 \cdots f_k$ denote an initial path of $S$ and let $\tilde{x}_i = \textsf{write}(f_i)$ and
+$\tilde{y}_i = \textsf{read}(f_i)$ be the respective read and written variables for $f_i$.  Let
+$(\alpha_i)$ denote a sequence of maps of variables in $\mathcal{X}$ to values, such that for each
+$i$, $\alpha_i$ and $\alpha_{i+1}$ differ only on $\tilde{x}_i$.
+The \emph{session trace} is then obtained by replacing each edge $f_i$ in the path with two events
+$Tx(f_i, \alpha_i(\textsf{src}(f_i)), \alpha_i\tilde{x}_i)$ and
+$Rx(f_i, \alpha_i(\textsf{tgt}(f_i)), \alpha_i\tilde{y}_i)$.\\
+
+A compliant subtrace of $S \in \tilde{S}$ is a projection of $S$ in that discards non-compliant events.
+As events are logged, session traces should capture all sequences of events in a partial run.  Values
+in the session variables as recorded in each event should accord exactly with the variable rewrites
+specified by the graph.\\
+
+All of this provides for a formal statement of the security property,\\
+
+\textbf{Theorem (Session Integrity):} Any run of a verified $\tilde{S}$-system includes a partition
+of the compliant events that coincides with compliant subtraces of sessions in $\tilde{S}$.\\
+
+In essence, compliant events of any run are interleavings of compliant events as they may occur along
+execution paths.  Important to this assertion is the assumption that views of the session state must
+be consistent among principals.  The force of this assertion comes from the fact that all principals
+using the protocol implementations $S_i\_protocol$ generated and verified by the compiler will
+have consistent views of the session state, and thus should be protected from $U$.\\
+
+For example, consider the simple proxy session shown in the figure.  Suppose the client and proxy are
+compliant, but the web service is not.  When the theorem holds, it must be that when the client
+received a 'Reply' message from the web service, the proxy previously sent a 'Forward' or 'Resume'
+request to the web service.  Importantly, the web service cannot reply to the client until its
+negotiation with the proxy has concluded.\\
+
+\section{Protocol Design and Cryptography}
+
+Assume first that every pair of principals $a$ and $b$ shares keys for encryption, MAC using
+symmetric cryptography.  Let $enc_b^a\{m\}$ and $mac_b^a\{m\}$ denote the encryption and MAC for
+node $m$.  Initially, $a$ generates keys for $b$, encrypts, signs and sends them to $b$ using
+asymmetric cryptography.  Each message consists of a header, a series of variable assignments,
+and a series of MACs.  The header consists of a session label and session identifier, we well
+as a message sequence number.  Variable assignments are contained in the message payload.  MACs
+are used to authenticate the integrity of the global state.  Importantly, this includes roles
+assigned to principals.\\
+
+Session identifiers are cached and used to prevent replay attacks.  Each principal should be able to
+determine, by inspecting the header of an incoming message, whether the message is an invitation to join
+a session or is a continuation of a session in which the recipient is already a party.  Session data
+is updated at each step, so that messages arriving out of order will be discarded.  Since session
+data specifies the permissible structure of a complete communication, and since sessions are tracked
+by each principal, attempts to mount an attack by sending unexpected messages will be rejected.\\
+
+Each role is characterized by a particular control flow graph, wherein only certain messages will
+be accepted by certain states.  The content of a given message is determined by the respective states
+of the bound roles, and current knowledge of variable contents.  Each such state can then be indexed
+by the role name of the sender and a path containing the last label sent by each of the roles,
+and the last occurrence of each written variable.  These correspond to internal control states.\\
+
+(See Corin et al. 2008 for more details on the determination and importance of control flow states
+in the session graph.)\\
+
+Control flow states, denoted by $\rho$, loosely correspond to the nodes of the original session graph.
+Control flow analysis actually gives a refinement of the session graph, which distinguishes between
+the first entry of a node, and subsequent entries occurring as iterations of a cycle.  The $\rho$ index
+the Tx and Rx functions in the generated protocol module.  Formally,\\
+
+\textbf{Definition (Internal Control Flow State):} An \emph{internal control flow state}, denoted by
+$\rho$, is an extended path obtained by applying the following function to a path with initial node
+$m_0$:\\
+Let $\textsf{st}(\tilde{f}) = \textsf{filter}(\tilde{f}, \epsilon, \epsilon)$, where $\textsf{filter}$
+is recursively defined as:\\
+$\textsf{filter}(\epsilon, \tilde{z}, \tilde{r}) = \epsilon$\\
+\\
+\begin{math}
+\textsf{filter}(\tilde{f}\ f, \tilde{z}, \tilde{r}) =
+\begin{cases}
+(\textsf{filter}(\tilde{f}, \tilde{x\prime} \tilde{z}, r \tilde{r})) (\tilde{x\prime})f
+\ \ if\ r \notin \tilde{r}\\
+(\textsf{filter}(\tilde{f}, \tilde{x\prime} \tilde{z}, \tilde{r})) (\tilde{x\prime})\ \ otherwise\\
+\end{cases}
+\end{math}
+\\
+where $r = \textsf{src(f)}$ and $\tilde{x\prime} = \textsf{write}(f) \not \tilde{z}$.\\
+\\
+Informally, \textsf{filter} makes a pass over an initial path, right to left, removing any labels sent
+by roles encountered on the right (which are accumulated in $\tilde{r}$) and any written variables
+(which are accumulated in $\tilde{z}$, keeping only the last occurrence of each variable and the last
+label sent by each role.  The result is that an internal control flow state gives the position fo each
+of the roles in the graph and, by interleaving variables and labels, the current knowledge of the
+store as seen by each role.\\
+
+The basic idea here is simply that the internal control flow state of each node can be determined
+at each stage of the communication.  This is an analysis performed by the compiler and used to
+generate appropriate sending and receiving functions.\\
+
+Note, at this point, that the trusted libraries are not verified by this method and are independent
+of the toolchain; they are assumed to be correct.
+
+\emph{Does this present any problems for CPS, as source terms may vary under CPS transforms?}\\
+
+\section{Sessions are Path Predicates}
+
+The Session Integrity theorem may be proven by considering paths as predicates.  The outline of the
+proof is as follows: Tx and Rx events are annotated with additional parameters, which are lifted to
+session traces also.  For each session, a family of predicates is constructed that must be maintained
+by a session implementation.  Typed interfaces are defined for the generated code, and it is shown
+that if code meets the types, then the invariants expressed by the types are maintained.  Each
+implementation is shown to be locally sequential, and the integrity of all code generated and
+typechecked by the compiler is established.\\
+
+Informally, the compiler generates predicates on pre- and post-conditions of global state
+for each particular control flow state that must be satisfied in order to ensure the integrity of
+the session protocol.  Whether this is the case is determined by the Z3 SMT solver.\\
+
+\subsection{Possible Future Work:} This paper does not detail secrecy, as this involves application
+code.  However, this would be a natural application of work on resumptions.\\
+
+
+
+
+
+
+\end{document}

@@ -1,0 +1,195 @@
+--
+-- this is ~/cheapthreads/ctc/ct/changes.log.txt
+--
+-- a log of Ben's changes to the CT compiler in Adam's absence
+--
+-- put here 24.06.09
+--
+-- Schulz
+--
+
+----------------------------------------------------------------------
+-- 24.06.09
+----------------------------------------------------------------------
+
+The primary objective is to produce FSMLang directly from the source code
+at:
+
+ ~/mils-hardware/Models/SecureQueues/CheapThreads/ 
+
+i.e. the SecureQ example.
+
+This will entail a number of changes, to be catalogued.
+
+The first task will be to implement type synonyms.  Though this is not
+strictly essential to SecureQ, it is a secondary consideration and
+will provide an opportunity for familiarity with the CT compiler front-end.
+
+Regarding this first task, suggest using the 'unify' function in
+
+  ./TypeChecker.hs
+
+as the point of entry; the strategy will be to change the way in which
+the TyADT type is unified, so that base-types are substituted for a
+constructed type when a synonym is present.  An alternative to this approach
+is a slight modification of the language conventions, so that ADTs are flagged
+by some feature of their identifying constructor string; strict ADTs could
+be then separated from type synonyms in the abstract syntax, which would
+require few deep changes to the code.  Third option is to change how convert
+operates on type declarations; its behavior in this respect does not appear
+to be essential, and it may be that type synonyms may be treated as, perhaps,
+redundant re-declarations of existing types.
+
+
+----------------------------------------------------------------------
+-- 25.06.09
+----------------------------------------------------------------------
+
+Passing observation: it appears that character literals are not permitted,
+at least not as the argument to an ADT constructor, i.e.
+
+  data ADT = N Int | C Char
+
+  foo :: ADT
+  foo = C 'a'
+
+will not parse.  It is possible this was intended, but does not seem likely.
+
+LATER:
+
+Began, and almost completed, type synonym support.  Ultimately, elected to
+change the type signitures directly at type-check time, early into the
+definition of tcProg, the effective top-level call to the type-checker.
+This is effected by reducing all type-synonym declarations to base-types,
+and then substituting these base types in the type-signitures of the
+program text.
+
+----------------------------------------------------------------------
+-- 26.06.09
+----------------------------------------------------------------------
+
+Finished code for type synonyms; a preliminary test suggests that it works
+as intended, though only trivial examples have been tried.  The code
+is relatively small, and situated to be called from within tcProg,
+in the initial 'let' bindings.  All type synonyms are reduced to
+associations between their label and a corresponding base type (where
+by 'base type' we mean one of the CT base-types, inductively including
+tuples and lists), and function type signatures using type synonyms
+are rewritten to the corresponding base types.
+The only assumption used is that type synonyms are parsed as TyADT,
+which, to the best of my knowledge, they always are at this point.
+
+Added a Eq instance for the CtsType type, as this was used by the type
+synonym code, and will probably be useful elsewhere.  (It appears that
+Adam uses equality between types, but has for some reason confined it
+to a local function.)
+
+LATER:
+
+Should amend the above to note that type identifiers appearing in
+type signatures which are NOT type-synonyms (i.e. algebraic data types)
+are not affected by the new code because their declarations are distinguished
+by the parser, and hence not used when replacing synonyms with their
+corresponding base type identifiers.
+
+It should be noted that the type checker appears to catch the unusual
+corner-cases wherein a type declaration and a data declaration using the
+same identifier, and does so because the resulting types fail to unify.
+
+LATER STILL:
+
+It should also be noted that the parser is indifferent to the monad
+indentifiers; only the particular transformer (i.e. StateT or ResT) used
+is parsed to a meaningful grammatical structure.  The defunctionalizer,
+by contrast IS sensitive to monad identifiers in at least one place,
+and so this will require changes to either the parser or the defunctionalizer
+at a later time.
+
+----------------------------------------------------------------------
+-- 30.06.09
+----------------------------------------------------------------------
+
+Scrapped earlier type synonym implementation; it suffered problems
+relating intertwined type synonyms and data declarations, i.e.
+cases in which a data declaration refers to a type synony, or vice versa.
+
+Replaced the code with what seems to be a simplified version;
+a simple recursive descent is first used to remove all references
+to pure synonyms, and then all TyADT references are rewritten
+in function type signatures.
+
+The implementation is a little bit inelegant, and parts of it may be
+redundant.  It could stand refactoring at a later time.
+
+Changed the way the parser handles type declarations; these are now parsed
+as data declarations with a single constructor with an empty identifier,
+i.e.
+
+  type TypeName = OtherType
+
+parses to:
+
+  (CtsDataDecl pos TypeName [cdec])
+  where
+    cdec = (CtsConDecl "" [OtherType])
+
+In retrospect, this was not strictly necessary, though
+at the time it simplified the conceptual task since there was
+no need to treat the two different sorts of type declarations differently.
+This should have no effect, as the CtsTypeDecl structure
+(which has been subplanted) does not seem to be essential.
+
+The type-checker (as-is) will now accept part of the SecureQ type declaration.
+
+Cleaned up yesterday's code mess in TypeChecker.hs
+
+----------------------------------------------------------------------
+-- 01.07.09
+----------------------------------------------------------------------
+
+Next step in compiling SecureQ is extending the parser to support the example.
+At this point, we are using Adam's adaptation of SecureQ to CT.
+(located at: ~/cheapthreads/ctc/ct/tests/secureq/secureq.hs)
+
+This example is accepted by the parser, except for two points at which
+the patterns used are not yet supported; in one case, this is due to the use
+of nested patterns (which the parser does not support), and in the other
+case this is due to the absence of support for infix applications,
+in particular, cons.
+
+The issue with cons is related to other difficulties, as we have not yet
+decided whether lists in particular, and recursive data structures
+more generally, should be supported.
+
+----------------------------------------------------------------------
+-- 03.07.09
+----------------------------------------------------------------------
+
+Further adapted the SecureQ example to expedite the demonstration;
+unrolled all nested patterns and extended syntax to accomodate
+infix applications and wildcard patterns
+
+The syntax extensions are tentative, and deployed mostly
+to facillitate the example; as such, they may not represent
+the ideal solution.
+
+Infix application patterns are designated using a constructed
+datatype, i.e. the operator is a newtype; the purpose of the
+constructor is simply to clearly separate its identifier from
+those of its operands.
+
+Nested patterns will be disregarded for now, as a closer
+examination has revealed that they make take more
+work that originally anticipated, though not substantially more.
+
+The current adaptation of SecureQ now parses.
+
+----------------------------------------------------------------------
+-- 24.07.09
+----------------------------------------------------------------------
+
+Added a primitive 'Memory' type to the syntax and the parser; this is to
+distinguish the memory type that the defuncitonalizer currently uses.  For
+details of why this has been added, see:
+
+  ~/cheapthreads/ctc/ct/defunctionalizer/defun.log.txt

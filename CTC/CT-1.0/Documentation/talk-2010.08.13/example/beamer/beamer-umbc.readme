@@ -1,0 +1,59 @@
+REVISION HISTORY:
+
+December 2004 --
+Original version
+
+March 2005 --
+1. Added theme beamerthemeumbc3.sty
+2. Fixed bug in beamerthemeumbc4.sty reported by Chuck Adams
+3. In beamerinnerthemeumbcboxes.sty, changed
+    \raisebox{-0.3\@myboxht}{\usebox\@mybox}
+to:
+    \raisebox{-0.25\@myboxht}{\usebox\@mybox}
+This file is distributed with my UMBC beamer theme collection.
+
+May 2007 --
+In files
+    beamerinnerthemeumbctribullets.sty
+    beamerthemeumbc3.sty
+    theme/beamerthemeumbc4.sty
+added \usepackage{pgfcomp-version-0-65} to make the obsolete
+commands \pgftranslate available again.  Eventually I will
+have to rewrite these files to replace \pgftranslate with
+its modern version.
+
+CONTENTS:
+
+Here is the contents of the archive, shown as a directory tree:
+
+beamer
+|-- beamer-umbc.readme
+`-- themes
+    |-- inner
+    |   |-- beamerinnerthemeumbcboxes.sty
+    |   `-- beamerinnerthemeumbctribullets.sty
+    |-- outer
+    |   `-- beamerouterthemeumbcfootline.sty
+    `-- theme
+        |-- beamerthemeumbc1.sty
+        |-- beamerthemeumbc2.sty
+        |-- beamerthemeumbc3.sty
+        `-- beamerthemeumbc4.sty
+
+To install, just unpack and merge the archive into your existing
+beamer directory tree.
+
+You may need to run texhash to make your TeX installation aware of
+the new files.
+
+
+                          --- NO WARRANTY ---
+
+    The UMBC beamer theme collection is provided in the hope that it
+    will be useful, but without any warranty; without even the implied
+    warranty of merchantability or fitness for a particular purpose.
+    You assume all responsibility for consequent risks or damages
+    when using this collection.
+
+
+Author: Rouben Rostamian <rostamian@umbc.edu>

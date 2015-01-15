@@ -1,0 +1,1379 @@
+--
+-- this is ~/cheapthreads/CTC/CT-1.0/RKI/rki.log.txt
+--
+-- development log for the RSI intermediate phase of the CT compiler,
+-- and the SAL back-end phase;
+--
+-- put here 2010.08.16
+--
+-- Schulz
+--
+
+----------------------------------------------------------------------
+-- 2010.08.16
+----------------------------------------------------------------------
+
+Laid down the initial syntax of the CT intermediate phase; this is the third,
+and if I have anything to say about it, final attempt.  The RKI language
+is based on the operational semantics calculated by defunctionalizing the 
+definitional evaluator for CT (see '~/CT-1.0/Theory/CT_Eval.hs' and the
+accompanying talk in '~/CT-1.0/Documentation/').  The language is a small-jump
+(but still substantial) translation from CT, with a syntax very similar
+to the (now deprecated) OESS.  Threads, however, are no longer primitive,
+and labeled blocks are better integrated as the central organizing feature
+of the language.
+
+Major issues that still need to be addressed:
+
+  + Dealing with the 'compile_any' feature called for by some applications
+    of monadic return, etc.
+
+  + Related to the above, deal with first-class resumptions
+
+  + Related to the preceding two, resumption-patterns
+
+  + handlers, schedulers, and signaling
+
+Although have discussed "type-directed compilation" at some length with Bill,
+would like to be able to compile without too heavy reliance upon type
+annotations in order to direct the compilation.
+
+
+----------------------------------------------------------------------
+-- 2010.08.17
+----------------------------------------------------------------------
+
+Need to make a clear design determination in how jump-to-subroutine works
+within the framework of the operational semantics; initially side-stepped
+this, but the only alternative is to write the compiler in a way that
+effectively inlines function code.
+
+The issue of jsr semantics also brings up, tangentially, the issue of whether
+CT should be treated as CBN or CBV, and what effect this should have on the
+intermediate form.  Function application is not a major feature of CT or
+RSI as defined so far, and so this point has remained ambiguous.
+
+Also at issue is whether blocks will be terminated by implicit or explict
+jumps.  At present, jumps are implicit in the syntax of 'Chain'; jumps
+from one block to another are thus fixed, except in the case of the newly
+added 'Jmp' constructor, which acts as a jump the destination of which may
+not be known until runtime.
+
+
+----------------------------------------------------------------------
+-- 2010.08.18
+----------------------------------------------------------------------
+
+Added 'compile_any', which returns a sum type that may be any of the possible
+compile return values; this leads to some clunky transitions, but it appears
+necessary in order to accomodate function application in the usual way.
+
+This brings up another issue, namely, how to generate code to update resumptions
+as they are run. In the same vein, it may be necessary to reassociate
+resumption terms so that the end of a resumption can be determined; this is
+necessary in order to correctly set the "done" bit in the resumption structure.
+Note that such a feature is necessary because resumptions may be deconstructed
+along the lines of the 'nextOf' idiom.
+
+
+----------------------------------------------------------------------
+-- 2010.08.19
+----------------------------------------------------------------------
+
+Further work suggests that 'compile_any' may not be as clunky as feared,
+provided the various kinds of data (R, K, I) are separated cleanly.  One
+minor question remains regarding what to do with floating blocks of
+imperative code, e.g. those that are not given in a global declaration, but
+appear only as the argument to a function.  It would be straightfoward to
+label these and simply specify the arguments in terms of jumps, but I would
+prefer to keep the resumptive and state layers as far separated as possible.
+
+Treatment of first-class resumptions may also be close to a resolution.
+A very simple example (see 'CT-1.0/TestPrograms/FreakShow/afterlife.ct')
+makes the point that a resumption, once defined, is never consumed, as
+a thread would be in the course of its execution; rather, the piecewise
+execution of a resumption proceeds by a series of variable bindings that
+direct jumps in the active execution stream to different points in a
+chain of stored code blocks.  In light of this observation, resumptions
+do not need their own program counters or status registers (at least, not
+at the level of 'R'); their starting points must only be kept track of
+accordingly.  Progress through a resumption other than that which is running
+will follow through a series of correctly compiled assignments.
+
+Did add an 'isDone' predicate as a primitive expression; this may or may
+not turn out to be necessary.
+
+Need to settle down on the structure of an RKI program; it appears that
+the 'compile' functions may have to return multiple structures (again, as a
+consequence of code floating around in function applications), and the
+global structure of full programs may influence this.
+
+Need to add support for 'struct' and 'union' to the intermediate, as this will
+certainly be necessary for dealing with 'case' expressions, though this may
+be a concern for a little later.
+
+
+----------------------------------------------------------------------
+-- 2010.08.20
+----------------------------------------------------------------------
+
+Suggest adding a distinguished 'rts' reference that operates similar to
+monadic 'ret'; this would be assigned each time 'step' is applied,
+as an application of step, by definition, produces a value of type
+'R (K (R a))'.  The distinguished 'rts' register would be assigned the
+label of the chain corresponding to the inner 'R'.
+
+
+----------------------------------------------------------------------
+-- 2010.08.23
+----------------------------------------------------------------------
+
+Struggling with the issue of whether imperative blocks should be labeled
+and jumps allowed outside of the 'Chain' construct.  Since blocks of
+state code can appear as arguments to functions, they may need to be
+referenced indirectly, whence the need to attach a label to them.  However,
+once the control flow genie is out of the bottle, it may be hard to put back;
+I was hoping that all issues of code could be handled through the 'Block'
+construct -- but this may still be possible.
+
+Currently, dealing with this issue by arranging 'compile_k' to generate
+a block as its final output -- thus, any chunk of state code produced
+for any other 'compile' function will be labeled already, and will still
+fit neatly in with the structure of resumption compilations.
+
+Began writing formatted output for code generation; output currently
+takes the form of a simplified assembly language, so that some constructs
+are unpacked into straightforward assembly idioms.  This is perfectly
+acceptable for now, but need to keep an eye on it, in order to watch
+for any assumptions encourage or otherwise bring in.  Note in particular
+that there is NOT a direct isomorphism between individual instructions and
+the syntactic productions declared in 'Syntax' from which the concrete output
+is produced. E.g., 'jmp' in the concrete output is not identical to 'Jmp'
+the syntactic constructor, although 'Jmp' does produce 'jmp' in the output.
+
+Wrote the minimal necessary expression compiler function, which is really
+just a transliteration from CT.
+
+----------------------------------------------------------------------
+-- 2010.08.24
+----------------------------------------------------------------------
+
+Further study suggests that jumps to/from (and maybe within) imperative code
+are probably not avoidable.  E.g.,
+
+  step k = step_R k
+
+is a valid CT declaration, with a formal parameter typed 'K a'; the variable
+will have to be translated into a jump to the code referenced through the
+formal parameter 'k'.
+
+Essentially worked out stored code, resumptions as values, and the issues
+surrounding function application.  As concisely as possible,
+the problem boils down to one of distinguishing between language and
+metalanguage.  When a variable appears as a function (something declared at
+the top-level) in the context of a monadic bind, it should be translated into
+a jump-to-subroutine instruction, with the jump target being the location
+of the referenced code.  When a variable appears as a value (e.g. the argument
+to a function application), it should be translated into a label reference
+that can be assigned to the appropriate parameter.  This leads to some
+redundant jumps in the output code, but does appear to be a correct
+transformation.
+
+Changed the return types of the 'compile' functions to accommodate the fact
+that some additional code blocks must be produced and passed to the output
+in order to correctly compile funciton arguments.
+
+----------------------------------------------------------------------
+-- 2010.08.30
+----------------------------------------------------------------------
+
+Over the past several days, refined the compilation of resumptions so as
+to fully resolve the problem of deconstrution, i.e. as in the 'nextof' idiom.
+Most of the details are documented in:
+
+  '~/CT-1.0/Documentation/talk-2010.08.27.tex'
+
+Smoothing out the code written so far so as to conform with the definitions
+of 'compile_R' and 'compile_K' given in the talk.  One issue that deserves
+attention is whether the particular idiom used to allow deconstruction
+of resumptions should apply only to stepped atoms, or should be applied
+to all productions of 'compile_R'.  As explained in the slides, state actions
+lifted into R by 'step' (CT does not provide any other means of constructing
+resumptions) are compiled in a way that threads the label of the next action
+through execution, while allowing switching between executions streams, i.e.
+as in kernel behaviors.  The issue is whether such label-threading needs to
+occur for all actions, e.g. function applications, and not just explicit
+instances of 'step'.
+
+Suggest the definition of a resumption deconstruction morphism, i.e. an
+'unlifting' or a 'lowering', as this is central to the sorts of programs
+we want to be able to write.  This is presently done through the use of
+'case' statements, but the behavior is important enough, I contend, that it
+deserves its own top-level primitive.
+
+
+----------------------------------------------------------------------
+-- 2010.08.31
+----------------------------------------------------------------------
+
+Discussions with Bill suggest that procedure calls should not be implemented
+using any kind of stack, involving assignments to specific jump-back variables.
+While the two are equivalent so long as restrictions on recursion are in place,
+it is entirely possible to operationalize the procedure of jumping to a block
+and jumping back.  This is done by emitting a uniquely labeled variable for
+every block in the output code; each top-level K-block then ends with a
+jump whose target is determined by the contents of that block's particular
+jump-back variable.  Just a little bit of thought should make it clear that
+this is equivalent to using a fixed-length stack in a situation where only
+tail recursion may occur.
+
+Added a label argument to the 'JSR' constructor, so that explicit jump-back
+assignments can be made.
+
+The one challenge will be properly assigning jump-backs when the target of
+a jump is given by a variable, e.g. as in:
+
+  inc k = k >> get G >>= \v -> put G (v + 1)
+
+where a jump to 'k' must be emitted, but the exact target may not be known
+until runtime.
+
+This is resolved by emitting additional jump-back variables for those
+cases in which jump lables may be passed through multiple variables, i.e.
+emitting jump back variables in the data section, not only for top-level
+functions, but for parameters (or other lambda-bound variables) that 
+may be passed jump labels.
+
+
+----------------------------------------------------------------------
+-- 2010.09.01
+----------------------------------------------------------------------
+
+Discussed the above isssue, namely, propagating jump-back labels, with Bill.
+Consensus seems to be that it would be better to inline such instances than
+to work out a complicated compilation procedure at this juncture.  Ordinary
+top-level references with no arguments, e.g. as in:
+
+  k0 = k1 >> k2
+  k1 = ...
+  k2 = ..
+
+are still easily compiled to jumps, and will be kept as such.  However,
+in cases such as:
+
+  init :: K a -> K a
+  init k = k >> ...
+
+  foo = init (put G 0)
+
+the application of 'init' to 'put G 0' will be inlined.  Suggest doing this
+by producing a block for each particular application and jumping to these;
+this will make it easier to track what's being inlined, and may provide an
+easy opportunity for cutting back on redundancy later.
+
+It remains to be seen whether such inlining is possible with resumptions,
+i.e. in applications of functions typed ':: R a -> R a' and similar.
+
+
+
+Wrote simple inlining of function arguments into 'compile_K'; top-level
+references with no arguments remain unchanged.
+
+Inlining proceeds by compiling the referenced function body in an environment
+where the parameters are bound to the CT expressions given as arguments;
+these are substituted from the environment when encountered and compiled
+in-place.
+
+I emphasize here that inlining is implicit in the use of the environment
+in in 'compile_K'; the source-to-source transformations from CT.Inline
+are not used.
+
+Some doubts remain as to whether this will be possible with resumptions, where
+the desired kernel behaviors may not allow the call tree to be determined
+in advance.
+
+
+----------------------------------------------------------------------
+-- 2010.09.07
+----------------------------------------------------------------------
+
+Wrote compiler case for 'resume'; this is exactly as laid out in the slides
+in the (2010.08.27) talk.
+
+Also expanded the compilation case for isolated 'step', as this was not
+quite right, as written; the strategy is identical to that used for 'step'
+when appearing on the LHS of a bind, except that a simple 'return' is
+effectively subsituted for the RHS of the bind.
+
+The question of how to properly end a resumption, especially an isolated
+'step' deserves some closer scrutiny.
+
+Would like to run generation of separate labels off of separate counters;
+just haven't gotten around to it.
+
+
+----------------------------------------------------------------------
+-- 2010.09.08
+----------------------------------------------------------------------
+
+Need to write a case for handling tuples.  Debating whether to do this
+through indirection, or through some sort of fixed data structure.
+
+Once tuples are implemented, compiling something like the one-line
+twist kernel should be straightfoward.
+
+Major kludge-fest ramming tuples into the current compiler pass; the current
+working version treats them as a special case of variables, and translates
+the primitives 'fst' and 'snd' into C-like 'struct' field references.  The
+representation of 'struct' in the expression syntax is a little awkward,
+and could probably stand a little more thought.  At present, however, my
+primary interest is in generating code for 'TwistKernel' that demonstrates
+the correctness of the general strategy for compiling resumptions.
+
+Another strange addition to the RSI syntax is the 'Chain' production 'LabelPt',
+which allows the possibility of redundant labels.  Although this may appear
+to be unnecessary, the compiler may have synonyms for the same point in the
+output, as a direct consequence for the way code is generated.  Without
+a great deal of needlessly complicated back-tracking and label-rewriting,
+prefer to allow label synonyms.  This also prevents a problem mentioned
+earlier, namely the dropping of labels during code-chain concatenation.
+Note that, at this stage, 'LabelPt' should only appear as a result of an
+application of chain concatenation.  May consider, however, replacing
+the 'Label' arguments of the chain productions with just 'LabelPt',
+though this may not be worth all the trouble.
+
+----------------------------------------------------------------------
+-- 2010.09.09
+----------------------------------------------------------------------
+
+Trying out the compiler on slightly more complex examples, i.e. hitting
+loops with the simple 'twist' scheduler.  This appears to work, but
+had some concern about the operation of 'loop' and 'return'.  According
+to the monad laws, however, these should not generate atomic actions as such,
+and so should not be deconstructable.
+
+An important task will be to identify which theorems should be preserved,
+and to prove that the compiler preserves these properties.
+
+Further inspection of the compiler output reveals that the problem of
+reference passing is still lurking in the background: 'resume', as currently
+written, is applying the right jump-offset to the wrong label.  Specifically,
+this occurs when resume is applied to a variable.  The compiler, in its
+present form, produces jumps-to-jumps (even when the inliner is applied)
+when dealing with resumptions-as-values; as a result, the offset is
+begin applied to the intermediate jump target, not the final one.
+
+After thinking through the problem, determined that an easy solution to
+the offset-passing problem would be to dispense with explicit offsets
+and add a distinguished "proceed"-bit ('R_Pro') and guard all rti-assignments
+in compiled-'step' with checks of the proceed-bit.  This appears to work,
+and is a solution in the same spirit as the original.  If anything there
+is some virtue in the fact that there's no tricky offset arithmetic, which
+is something I never intended to be in the target language.
+
+Changed the structure of the cases for 'step' and 'resume' accordingly.
+
+
+----------------------------------------------------------------------
+-- 2010.09.10
+----------------------------------------------------------------------
+
+Yesterday's changes to 'step' and 'resume' appear solid, even after closer
+inspection.
+
+One concern that continues to bother me is whether left- and right-unit
+hold in the resumption monad as compiled here.  This should be a specific
+target for investigation, as we probably need to verify it sooner or later.
+
+Found and fixed an out-of-order jump label.
+
+Still troubled by the exact semantics of 'loop'; these initially appeared
+to be well defined, but there is an odd corner-case in which the body of the
+loop contains only 'return' actions, e.g.
+
+  loop_R (\x -> return ())
+
+This is properly typed as a resumption, but cannot be deconstructed by
+'resume' as currently compiled.
+
+The essence of this questions seems to be how to interpret when a resumption
+is actually 'Done', i.e. done executing.  According to the monad laws,
+this should only happen at the end of a given resumption, but some questions
+remain as to where (or whether) control should return, and how this information
+should be passed to 'resume', or a handler.
+
+
+----------------------------------------------------------------------
+-- 2010.09.13
+----------------------------------------------------------------------
+
+Discussions with Bill reveal that, although the current compilation strategy
+is correct, it may not be exactly what we are looking for -- at least, not
+in all cases.
+
+As concisely as possible, it turns out that we want an intermediate
+representation that captures all the correct aspects of control flow, atomicity,
+and imperative assignment but without explicit reference to the mechanisms
+for control flow, etc.  For instance, we may want control flow to be handled
+by interrupts, and we may moreover, want the masking of the interrupts to be
+implicit.  Identified at least three distinct cases of correct compilation
+with different levels of trust in the ambient system, namely:
+
+  + simulated atomicity: compilation to assignments and explicit jumps
+    (which is the current compilation strategy);
+
+  + kernel-dependent atomicity: compilation to assignments and to
+    set/clear instructions applied to an interrupt-mask register (IMR);
+
+  + hardware dependent atomicity: compilation to a (hypothetical) hardware
+    architecture in which each instruction carries an extra bit indicating
+    that interrupts may not occur;
+
+These are all legitimate compilation targets, but highlight the need to
+separate the current extra-large phase into distinct phases.
+
+The RSI syntax, as presently constituted, captures all the correct atomicity
+and control flow aspects, but has some extra concrete details hanging around,
+i.e. the distinguished references used to direct control flow.  In order to
+produce a more general intermediate representation, these need to be taken
+out and put into a separate target syntax.
+
+
+----------------------------------------------------------------------
+-- 2010.09.16
+----------------------------------------------------------------------
+
+Moved copies of the existing Syntax and Compile modules to subdirectories
+respective to the several different implementations of atomicity suggested
+so far.
+
+Added an 'Atom' primitive to the main RSI syntax; this is identical in
+structure to 'Block', but with a semantic denotation indicating that the
+imperative code in the argument should be executed atomically.
+
+Hopefully, no major changes to Syntax will be necessary, although it remains
+undecided whether all implementations will use an identical syntax, or whether
+there will be minor variations.
+
+----------------------------------------------------------------------
+-- 2010.09.17
+----------------------------------------------------------------------
+
+More conceptual changes;
+
+Problem seems to call for clearly separating the state and resumption components
+into distinct components of control flow and imperative assignment,
+respectively.  The previous strategy (i.e. rti-nxt-pro) comingled these
+considerably, making it difficult to apply the same function to different
+targets, i.e. those controlled by interrupts, or by other specific hardware
+mechanisms.
+
+Decided the best way to address this issue is to keep state compilation as-is,
+while lightening compilation of the resumption monad to an close transcription
+of the resumption syntax.  The different target paths seem to be characterized
+by different realizations of the control flow structure specified in a given
+resumptive term, and so hard compilation of these seems better delayed until
+the next pass.
+
+Important to this strategy is the specification of an atomicity primitive;
+in the course of working on this, realized that the assignment of lambda-bound
+variables must occur within an atom on the RHS of the bind in order to
+produce a correct compilation.  If the LBV is assigned after the RHS action is
+performed, the calling resumption (e.g. the scheduler) may change the contents
+of r_ret, causing the LBV to be assigned incorrectly.  Although it is perfectly
+possible to move the assignment of the LBV inside of the RHS atom, there
+are some annoying complications involved in doing so, and there remains some
+ambiguity of whether 'break' and 'resume' should be treated as atoms in this
+context.
+
+----------------------------------------------------------------------
+-- 2010.09.18
+----------------------------------------------------------------------
+
+First rough, but effectual, tweeks to the compiler code implementing
+abstracted atomicity.  Twist appears to compile correctly, although the
+absence of concrete details still makes me nervous; the meanings of all
+the abstracted control flow primitives does not seem completely clear.
+
+Most notable of these is 'Swr', which is really just an out-and-out
+transcription of resume, with the switch-resume mechanism to be resolved
+by the next pass down.  My current opinion is that fully abstracting over
+'resume' is necessary because how precisely it is handled depends strongly
+on the details of the particular implementaiton in question.
+
+Note, however, that 'resume' is still compiled to spill r_nxt into r_ret;
+don't see a way to dispense with this detail.
+
+
+----------------------------------------------------------------------
+-- 2010.09.20
+----------------------------------------------------------------------
+
+Smoothing out some of the imperfections of the previous revision.
+
+This includes some tweeks to function calls, to ensure that jump-back
+occurs as necessary; some of the preceding changes had taken this code out.
+In the course of this work, observed that similar jump-back mechanism might
+resolve the issue of what to do about correctly compiling 'Done' in resumptions.
+
+Tested the old DSLWC example; it works just fine.
+
+The resumption cases for Bind have now been divided between two syntactic
+categories: an explicit lambda (preferred), and a reference to a function
+identifier.  Since there are no higher-order functions in CT, this identifier
+is always resolvable at compile-time.  "f >>= f" is a common enough idiom
+that I wanted to support it.  Note, however, that resumptive code is not
+inlined in this case; a jump is produced.
+
+
+----------------------------------------------------------------------
+-- 2010.09.21
+----------------------------------------------------------------------
+
+Added a case for the new 'resume_Re' definition; this should be identical
+to compilation for 'resume_R' except that the control switch should be
+preceded by an assignment of the response to 'r_ret'.
+
+Still some vague concerns in the back of my mind about saving of requests,
+responses, but can't yet think of any specific problems with the current
+implementation -- it may be that there are none.
+
+First stab at compiling constructor applications; these behave similar
+to Cartesian products, but are more general.  In a nutshell, a constructor
+is compiled to a sequence of assignments to the fields of a fresh
+struct variable, ending with an assignment of the entire structure to the
+identifier specified to receive the constructed value.
+
+Now able to compile very, very simple reactive resumptions.  Currently, the
+active request is stored in a distinguished 'r_req' register; this is
+assigned by signal.  Each reactive resumption  contains a redundant assignment
+of this register, once before and once after the pause, so that the value can
+be passed to the handler, while activity of other threads does not clobber the
+value.  This may, however, require further thought.
+
+
+----------------------------------------------------------------------
+-- 2010.09.23
+----------------------------------------------------------------------
+
+Some conceptual difficulties with correctly passing signals in reactive
+resumptions; the problem lies with the need to deconstruct reactive
+resumptions to examine the signal, while still ensuring that assignment
+of the response occurs within the correct atom.
+
+Because the current approach calls for greater abstraction, decided that
+these issues are best dealt with by introducing atomic constructs 'throw'
+and 'catch', together with a variant of 'swr':
+
+  throw q
+
+interrupts the current stream and passes request 'q' to the caller;
+
+  catch p r
+
+takes the contents of 'r_ret' and resumes execution of stream 'r' with 'r_ret'
+bound to 'p';
+
+  swt r
+
+operates exactly as 'swr', except that it skips over occurences of 'throw'.
+The importance of this is that it allows two different modes for running
+a reactive resumption: one in which only request is examined, and another where
+requests are ignored, and only the resident imperative code is run.  Such a
+scheme allows the handler to examine the signal of a reactive resumption
+without necessarily creating separate storage for the signals of each thread.
+Provided that each reactive action is preceded by a 'throw', the reactive
+stream can be run with 'swr' to obtain only the signal, or with 'swt' to
+to run the stream with the current contents of 'r_ret' or 'r_rsp'.
+
+
+----------------------------------------------------------------------
+-- 2010.09.24
+----------------------------------------------------------------------
+
+Implemented reactive two-stepping;
+
+All reactive actions are now compiled to a 'throw' followed by either
+a 'catch' (in the case of a bind-with-variable) or just an 'atom' (in the case
+of a null-bind).  May need to go through a double-check the implementation of
+these, as I have been coding them a little fast and loose, just to get
+output for evaluation.
+
+
+----------------------------------------------------------------------
+-- 2010.09.28
+----------------------------------------------------------------------
+
+Going over the compilation rules in 'compile_Re' to ensure that the rules worked
+out for the elementary cases ('step', 'signal') also work for the resumptive
+control structures.  These appear to work, when unpacked in terms of their
+semantic definitions; both 'loop' and 'if-then-else' are preceded by a 'step' intheir given semantic definitions, and so should preserve the expected pattern
+of actions interspersed with 'throw'.  This may, however require some extra
+work to get the semantics straight.
+
+----------------------------------------------------------------------
+-- 2010.10.02
+----------------------------------------------------------------------
+
+A brief summary of things that need to be built, issues that need to be
+dealt with in upcoming compiler work:
+
+  + Sort out the issue of determining when a resumption is "Done";
+  + Implement case expressions;
+  + Address the lingering issue of tuples, especially tuples with one
+    or more monadic arguments;
+
+Suggest handling 'Done' by using 'throw' to always interrupt the thread
+in question, throwing back the appropriate return value.
+
+After a small amount of coding, added just this mechanism to the compilation
+of resumptions; the usual compilation function, i.e. the one that traverses
+the syntax tree, is wrapped by another function that appends an action
+that throws a distinguished 'done' signal.
+
+What all this suggests is moving toward an abstraction in which resumptive
+actions are treated as somehow distinct from ordinary functions (as they
+should be, really); termination is handled by some explicit interrupt,
+with the 'how' to be shaken out in the final implementation.
+
+Began a transfer of the code from 'ETIC.Codegen' used to compile 'case'
+statements; only partially completed this, due to data structure differences
+that I don't quite feel like muddling through today.  There are some
+additional fine points to the meaning of 'case' in the context of the various
+monads, and these remain to be sorted out as a sub-task.
+
+
+----------------------------------------------------------------------
+-- 2010.10.06
+----------------------------------------------------------------------
+
+Finished moving over the code for compiling 'case'; this is complete for
+the identity monad pass, which will at least allow for the deconstruction
+of constructed values appearing as simple expressions.  Need to do a little
+further work on allowing non-monadic (idenity) 'functions' as macros,
+in particular by adding a case to 'compile_fun'.
+
+Tested on some simple examples; appears so far to work.
+
+----------------------------------------------------------------------
+-- 2010.10.07
+----------------------------------------------------------------------
+
+Tightening the bolts on the pattern matching code from yesterday;
+
+One thing that should be taken care of (discuss with Bill) is how to handle
+pattern match failures; at present, these simply compile to a default NOP case,
+which they probably shouldn't.
+
+
+----------------------------------------------------------------------
+-- 2010.10.08
+----------------------------------------------------------------------
+
+Beginning work on the next phase of the compiler; this constitutes compiling
+all 'throw' and 'atom' constructs into simple, labeled blocks of code.
+Beginning work with the branch that uses an interrupt mask register (IMR)
+to implement atomicity.
+
+A first consideration to look into: do we want to treat multiple interrupt
+masks/sources, or is it sufficient to have just one?
+
+Added several features to the modded RSI syntax, and it may be expedient
+to propagate these up to top level verion, so that the branched phases actually
+look like transformations on an RSI program rather than out-and-out compilation.
+
+Along these lines, added three new distinguished references: IMR, INR, and R_Z;
+the first is the interrupt mask register, the second is the waiting-interrupt
+indicator, and the third is the zero bit in the machine status register.
+Within the current framework, an interrupt will occur if and only if
+both IMR and INR are set, i.e. non-zero.
+
+Worked out a first try at the compilation rules, added this to the LaTex doc
+already containing the rules for compiling CT -> RSI; implementing code
+should be relatively short, and complete soon.
+
+
+----------------------------------------------------------------------
+-- 2010.10.09
+----------------------------------------------------------------------
+
+Wrote the code implementing yesterday's compilation rules; these are
+straightforward, and the transformation is simple enough to implement
+as a pure Haskell function, without the need for state or environment monads.
+
+Some new labels are introduced, derived from the existing ones, so that there
+should be no label conflicts.
+
+One issue, however, that should be watched closely is to ensure continuity
+of the label sequences, i.e. ensure that if chain B has label L in RSI,
+it's corresponding entry point in RSI_Imr should be L also.
+
+
+----------------------------------------------------------------------
+-- 2010.10.11
+----------------------------------------------------------------------
+
+Several small matters to be dealt with, namely:
+
+  + add declarations to the output of the RSI phase; these will be needed
+    for the purpose of register allocation on the back-end;
+
+  + distinguish anything that acts as a handler, as these may need to be
+    specially labeled in the final output to Microblaze;
+
+  + arranging the calls to all the appropriate back-end functions in
+    an orderly, and not-too-complicated fashion in the top-level compiler call;
+
+The second may present a number of difficult challenges when compiling to
+Microblaze.  It may prove easier to dispense with MB's distinguished
+'__EXCEPTION_HANDLER' construct, and work around it.
+
+Added declarations as very, very simple types to RSI, which will be necessary
+in laying out the data section produced by the back-end.  Propagated these
+additions through the new '_Imr' variant.
+
+
+----------------------------------------------------------------------
+-- 2010.10.12
+----------------------------------------------------------------------
+
+Started writing in the declaration passes to the base RSI compiler.
+One small point: care should be taken that some later change to the
+environment bindings of the globals does not result in name inconsistencies
+with the declarations.  I left the door open for variables with one identifying
+string S in the source to be bound to a possibly different string S' in the RSI
+compiler's environment, in case some need for changing the names arose;
+just make sure no bugs get in.
+
+An awkward issue from way back has also raised its head, namely, how to deal
+with polymorphic register types, e.g. the monadic return value 'r_ret'.
+The return register may, in general, have any type, and this must be reflected
+(somehow) in its declaration, which may be a little awkward.  One suggestion
+would be to leave it as a pointer to some particular location, although this
+does not address the problem of how to encode/decode the referenced value.
+
+Did the very extensive and very tedious coding to produce variable declarations
+from the RSI compiler pass; this required changing virtually every data
+structure.  Further attention should be exercise to ensure that no variable
+name overlaps have inadvertantly occurred.
+
+
+----------------------------------------------------------------------
+-- 2010.10.13
+----------------------------------------------------------------------
+
+Odd research question, from out of nowhere:
+
+Is resumption passing style (RPS) equivalent to single-static assignment (SSA)?
+
+
+----------------------------------------------------------------------
+-- 2010.10.14
+----------------------------------------------------------------------
+
+After some research into general strategies for code generation, settled
+upon an overall framework for producing object code from the RSI sub-phases:
+
+  -> translate RSI into a three-address code with virtual registers (SAL);
+  -> perform data flow analysis and register allocation on the result;
+  -> rewrite the SAL program to remove virtual registers;
+  -> apply instruction selection to translate SAL into Microbalze assembly;
+
+Wrote out the abstract syntax for SAL; at this stage, I am opting to have
+distinguished instructions for asynchronous control flow, i.e. interrupts,
+since these serve such an important role in CT overall, and will need careful
+treatment in the object.
+
+Rearranged the data structures for the RSI subphases to remove some of the
+redundances; should be able to use the same variant of 'Chain' (now 'Chain_B')
+for all subphases, since all of these merely compile away 'Atom' and 'Throw'.
+Rearranged modules and dependencies accordingly.
+
+
+----------------------------------------------------------------------
+-- 2010.10.18
+----------------------------------------------------------------------
+
+Tweeking the SAL syntax to more closely resemble actual machine instructions;
+added immediate modes, since these will be necessary for register spilling.
+
+Should be able to avoid type annotations to the RSI syntax tree by relying
+upon the types given in variable declarations; will need at least some of
+these for ultimately determining features like the location of struct fields.
+
+
+----------------------------------------------------------------------
+-- 2010.10.19
+----------------------------------------------------------------------
+
+Changed the data structure conventions for struct-union fields; these
+previously could be any 'Ref', but this is not consistent with the
+typical usage, since the field needs to be something statically defined.
+Doing otherwise would have required type annotations to every reference in 
+the RSI syntax tree, which is unnecessary and undesirable to say the least.
+
+One fine point that needs to be dealt with is allowing for a 'constructor'
+field that all constructed types have in common; these, however, can all
+be the same type ('int'), and can be dealt with by a special check
+in SAL.Compile.
+
+Review of the code in RSI.Compile suggests the need to produce the correct
+union-struct organization when compiling constructed values, as it appears
+that I took a shortcut and made everything a structure, which is sort of
+correct, but not quite.
+
+Added an environment layer to the compilation monad for RSI -> SAL,
+though it will really only be used to look up types of struct fields.
+
+
+----------------------------------------------------------------------
+-- 2010.10.20
+----------------------------------------------------------------------
+
+More work on expressions; added a comparison instruction, as well as
+an immediate-mode jump.
+
+
+----------------------------------------------------------------------
+-- 2010.10.26
+----------------------------------------------------------------------
+
+After a huge amount of wringing my hands about design choices in the instruction
+set of the simplified assembly language, decided to add a destination register
+to 'MTst', so that the result of the zero-test is explicitly stored somewhere;
+this can be compiled away to the zero bit in the object, but is probably
+better made explicit here.
+
+This alleviates some my concerns regarding economical ways to implement
+C-like Boolean expressions without resorting to branches.
+
+----------------------------------------------------------------------
+-- 2010.10.27
+----------------------------------------------------------------------
+
+Debating whether we need an instruction to test the sign of a number,
+or whether this is better done using a multiple-instruction idiom.
+
+
+----------------------------------------------------------------------
+-- 2010.11.01
+----------------------------------------------------------------------
+
+Finished the cases for pure expressions.  The boolean expressions make
+extensive use of the comparison and test instructions ('Cmp' and 'Tst'), which
+prodce the familiar 'sgn' function from mathematics, and test for the presence
+of a zero, respectively.
+
+Some concern over whether there will be any cumbersome structures resulting
+from the transliteration of SAL into real assembly languages.  This remains
+to be seen.
+
+Ambiguity about what the meaning of "result register" should be for an
+assignment, which shouldn't have an expressible value as its result.  May
+return a 'clear' value in keeping with the convention of 'put' in the source
+(although this is only a convention by loose analogy), but this will require
+some examination of how the return register is being used in these cases.
+
+Require some further thought on how to clearly distinguish reference from
+dereference; this appears to become a problem in the context of structs and
+unions, as field references may be nested, or may have a referent that is
+specified by a variable.
+
+Some difficulties in deciding how to compile unions suggest the need for
+clearly defined conventions regarding addressability, offsets.  These seem
+to best belong in the final stage of the compiler, but should not be completely
+disregarded.  Unions fields, in particular, require two distinct values
+for correct access: one to delineate the start of the data, and one to indicate
+the end.  At present, there are no clear conventions for determining whether
+or not a given value can even fit into a register, or what to do with
+any 'slack space' in the memory location.  I would like to avoid propagating
+type annotations, but there is the unpleasant possibility that I may have to
+use them somehow.
+
+Several important system-dependent conventions that MUST BE ACCOUNTED FOR:
+
+  + size of the registers
+  + largest addressable block
+  + endianness
+  + possible word alignment
+
+
+Finished implementing all of the (currently used) cases for imperative code.
+
+These are straightforward, but may become more complicated as subtleties in the
+final object code generation arise.
+
+
+----------------------------------------------------------------------
+-- 2010.11.02
+----------------------------------------------------------------------
+
+Implementing the cases for the resumption monadic control structures, i.e.
+'Chain' and 'Chain_B'.
+
+Some interesting features of the compilation are coming out, namely the
+simplicity of all code but that specifically permitted to influence control.
+
+LATER:
+
+Finally ran up against the consequences for leaving 'Done' undefined, as
+regards thread termination.  The operational semantics given in 'Documentation'
+suggest that return addresses are pushed onto a stack; however, Bill has made
+unambiguously clear his opposition to any kind of runtime stacks.  One idea
+is to simply have a terminated resumption enable interrupts and loop
+indefinitely in place.
+
+There are also some unsettled questions surrounding the compilation of 'Swr';
+in particular, these surround the question of how and whether interrupts are
+set, enabled, or disabled, and when.
+
+FOR NOW: I assume that the call stack from the handler never runs more than
+one deep, i.e. that there is only one kernel handling other threads, so that
+it is sufficient merely to jump to the specified thread and, on the current
+compilation path, allow for the hardware-native interrupt mechanisms to handle
+the issues of return addresses, etc.
+
+ALSO: Suddenly recollected that no careful thought has been given as to whether
+the current compilation is compatible with all possible paths, or only the
+'Imr' path on which work is presently proceeding.  Suggest constraining the
+half-phase that translates 'Chain' into 'Chain_B' so that all necessary
+changes take place in the blocks wrapped by the 'Chain_B' control constructs.
+Current work may already correctly implement this strategy, but it couldn't
+hurt to double-check.
+
+
+----------------------------------------------------------------------
+-- 2010.11.03
+----------------------------------------------------------------------
+
+Began work on a simple register allocator to be applied to the output
+of the SAL phase.
+
+Current register allocation implementation will be based on Poletto and Sarkar'slinear scan algorithm.  I've chosen this strategy for its relative simplictiy
+and good runtime performance, the latter being a special consideration because
+(1) graph coloring is very computationally expensive and (2) the current
+compiler implementation already shows some noticeable slowness for all but
+very small programs.
+
+What are the ramifications of register allocation for separation properties?
+
+
+----------------------------------------------------------------------
+-- 2010.11.04
+----------------------------------------------------------------------
+
+More work on the register allocator.
+
+Some concern regarding how to construct the control flow graph; since the
+CFG will be constructed from the SAL output, which has arbitrary-target jumps,
+there may be complications in producing all the possible edges -- I don't want
+a jump to induce an edge to every block in the graph.  Need to capitalize on
+the restrictions on CT to deal with this issue economically.
+
+LATER:
+
+After some thought, decided that the simplest way to deal with constructing
+control flow for jumps with a variable argument is to add a special edge
+to the graph, indicating that control may switch (potentially) to ANY labeled
+point in the code -- which, in general, it can.  How precisely this is handled
+can be changed later, but for the time being, the data flow can be handled
+by having the register allocator spill all (or all but certain special)
+registers each time the special jump-anywhere edge is encountered.
+
+Suggest we restrict the 'branch-on-zero' instruction to take only an
+immediate argument; indeterminate control switching should be restricted
+to kernel actions only.
+
+
+----------------------------------------------------------------------
+-- 2010.11.05
+----------------------------------------------------------------------
+
+Changed branch-on-zero to take an immediate branch target only; this simplifies
+the construction of the control flow graph, and the resulting data flow
+analyses.  This is also in keeping with the general conventions of CT,
+wherein the mechanisms of control flow should be carefully constrained.
+
+Observed (but not presently taking advantage of) an opportunity for
+optimizations stemming from the fact that functions are kept separate from
+one another throughout the compilation.  The RSI pass compiles declared
+functions separately and puts the resulting code blocks into a list; SAL
+maintains these elements as separate.  It may be possible to improve
+register allocation somehow using this feature.  At present, however,
+the blocks are concatenated into a monolithic block of code, which is
+then used to produce a control flow graph for the entire program.
+
+
+----------------------------------------------------------------------
+-- 2010.11.07
+----------------------------------------------------------------------
+
+Finished off control flow graph generation; this does not explicitly
+preserve blocks kept separate in RSI and SAL, although, in general the
+distinguished CSW edges of the graph should account for all possible
+control flow.
+
+NOTE: at this point, we are still operating under the assumption that there
+are no subroutine calls, i.e. that all subroutines declared in the source
+are inlined.  In the case of procedure calls, there may be non-trivial
+control flow that should be better accounted-for.
+
+Began writing liveness analysis.  Kludged in a partial instance of 'Eq'
+on 'Ref', since the distinguished registers in the 'Ref' sum type are
+retained in the sum type for virtual registers ('VReg') used by SAL.
+This looks a little weird, but I think it is worth keeping these registers
+distinct (for now), and this is a straightforward way of doing so.
+
+
+----------------------------------------------------------------------
+-- 2010.11.08
+----------------------------------------------------------------------
+
+Cleaned up the graph construction a little bit;
+
+Statement in the preceding entry deserves a more concise formulation, namely:
+
+The control flow graph will include no explicit edges between the code blocks
+output by the RSI and SAL phases; all control flow between blocks should
+occur via 'CSW' edges.
+
+LATER:
+
+Almost finished implementation of the liveness analysis; this produces a list of
+basic blocks, paired with respective live-in and live-out registers.
+
+The implementation is a little bit convulted, perhaps due to the fact
+that I attempted to adapt it from an iterative algorithm, perhaps simply due
+to the fact that Haskell is a little awkward in general for writing
+graph algorithms.
+
+
+----------------------------------------------------------------------
+-- 2010.11.09
+----------------------------------------------------------------------
+
+Finished control flow generation and liveness; hooked them into the compile
+chain.
+
+Double-checked the code for bugs; not the most elegant, but it appears solid.
+
+Coming next: register allocation using the newly annotated CFG.
+
+LATER:
+
+Resumed work on the register allocator; currently deliberating which numbering
+scheme to apply to the input instruction sequence, in order to compute the
+liveness internvals.  Would like to use a preorder traversal of the CFG to
+do this, but this scheme may possibly require further annotations to the tree,
+which I would like to avoid.
+
+----------------------------------------------------------------------
+-- 2010.11.10
+----------------------------------------------------------------------
+
+Need to check the order in which the successors of a conditional branch are
+put into the CFG; this is a fine point that is important to ensuring that
+numbering and flattening the CFG does not put the blocks out of order.
+
+FOR NOW, assume they are in the correct order, so that the blocks of the
+CFG can be simply concatenated in a simple pre-order traversal.  In the worst
+case, the conditional edges can simply be annotated, which should make the
+ordering unambiguous.
+
+Encountering some problems with correctly numbering the CFG in traversal order;
+there is some danger of duplicate numbers if the recursive calls are misused.
+
+LATER:  After a lot of painful deliberation, decided that the numbering
+in our graph traversal should be correct, i.e. should not produce duplicate
+numberings.
+
+Haven't ruled out getting around the mess with the state monad, but still
+avoiding it.
+
+
+----------------------------------------------------------------------
+-- 2010.11.11
+----------------------------------------------------------------------
+
+Redefined the data structure for edges in the CFG ('CFEdge') to make branches
+explicit.  This greatly simplifies much of the control flow analysis,
+(and may present opportunities for optimization) since the type of control
+flow in use is made explicit in the edges themselves, and thus removes much
+(though not all) of the need to search through edges lists to determine
+successors, etc.
+
+Another thing that I notice, after carefully inspecting the code, is that
+many of the data structures are needlessly duplicated in multiple places
+within the code.  Even if this is a Haskell program, where people don't
+usually care about these kinds of things, the memory usage could probably
+be tightened up somewhat without too much extra work.
+
+
+----------------------------------------------------------------------
+-- 2010.11.12
+----------------------------------------------------------------------
+
+Today's challenge: put together the register liveness information,
+which is associated to blocks, with the instruction numbering annotations.
+And do it all in a way that is not completely insane.
+
+Recall:
+
+A variable begins its live interval at the first point that it is assigned;
+a variable is live in block B if it is live-in on some incoming edge to B;
+a variable ends its current live interval if it is not live-out on any
+outgoing edge from B.
+
+
+----------------------------------------------------------------------
+-- 2010.11.14
+----------------------------------------------------------------------
+
+Concisely, a list of things that need to be done:
+
+  + Fix the 'CSW' edges so that they carry enough information to allow
+    for a full context switch to take place, i.e. registers spilled
+    before the jump are restored at the implict return point;
+
+  + Also fix the 'CSW' edges so that they are traversed the expected
+    sequential way, while preserving liveness;
+
+  + Fix the control flow graph so that the implicit return point is included;
+    note, that, in general, this point will be traversed;
+
+  + Work out the details of structuring and applying the variable-to-register
+    map;
+
+  + Fit the variable-to-register map onto the variable-spilling information;
+
+  + Make sure the details of interrupt jumps and returns work as expected;
+
+  + Implement register spills due to variable pressures;
+
+  + Implement register spills due to context switching;
+
+----------------------------------------------------------------------
+-- 2010.11.15
+----------------------------------------------------------------------
+
+Realized that the special cases originally written in to handle fall-through
+for conditional branches are also applicable in the cases of register-targeted
+jumps.  Although unconditional branches do not have fall-through in the same
+sense, they should appear only in the instance of a context switch.  As such,
+there needs to be an implict return point -- in this case, the instruction
+immediately following the jump.
+
+From a theoretical point, this may be just a little awkward, since there is
+no clean distinction between a jump with no return, and a jump with a return.
+Correctness in this case demands that there always be a return, but this is
+not quite explicit in the intermediate representation.  This is a relatively
+small issue, however, and can probably be dealt with later.
+
+It should be noted that earlier assumptions about CSW never being a predecessor
+are voided.  In general, control may flow to a successor vertex across a
+context-switched edge; what's important is that this distinction be fully
+accounted-for.
+
+Changes to the CSW edge should not affect liveness; although a context switch
+may occur between the respective blocks of a CSW edge (b, b'), if variable v
+is live in b, and is live in b', then it should be considered live-in across
+the edge in quesion.
+
+*** CSW is retained exactly because it is necessary to spill the registers
+at the end of the source block and to restore the registers at the beginning
+of the destination block.
+
+The intermediate form generated by the first SAL pass should obey the usual
+SSA semantics, i.e. each variable should be defined only once in the program
+text.  As such, it should be possible to simply allocate spill locations for
+each virtual register, so that it is not necessary to resort to stacks, etc.
+
+LATER:
+
+Added an extra pass over the CFG that replaces CSW edges with ordinary
+CFE edges, inserting the necessary register spill/restore instructions
+to the affected blocks.  This prevents the context switches from interfering
+with the register allocation pass, since the transformation can be performed
+before virtual registers are replaced with real ones.
+
+Finally began implementation of the register allocator proper.
+
+The register map is constructed from a single pass over the list of
+live intervals.  A variable is either mapped to a machine register on a given
+interval if there is a free register, or it is marked as spilled on that
+interval.  Insertion of the instructions necessary for register spilling is
+handled during application of the register map.
+
+
+----------------------------------------------------------------------
+-- 2010.11.16
+----------------------------------------------------------------------
+
+Slightly modifying the spilling of registers from its specification in the
+original, imperative description of the linear scan algorithm.  Variables
+which must be spilled in memory are simply marked, and the candidate variable
+is directly given the register of some key chosen from the allocation map.
+
+Finally finished implementation of the linear scan.  Still need to:
+
+  + triple check the code for correctness;
+  + hook up the linear scan to a top-level call with appropriate initials;
+  + apply the register map to the SAL output;
+
+LATER:
+
+Re-checked code, finished generation of register maps and added
+top-level call hooking up all the odd, complicated dataflow functions;
+all that remains is to apply the map.
+
+Coming next:
+
+  + give the distinguished registers dedicated map targets, which (I believe)
+    they should probably have -- but don't make future changes any harder
+    than necessary;
+
+  + work out and implement instruction insertion necessary for use of spilled
+    variables in the the output code;
+
+  + work out the ugly details of convincing the type system to allow use
+    of machine registers assigned by the allocator in the instruction seq
+    passed in to the allocator;
+
+  + once register map is applied, begin work on instruction selector.
+
+
+----------------------------------------------------------------------
+-- 2010.11.17
+----------------------------------------------------------------------
+
+Beginning work on a simple implementation of register spilling.  Because
+this is one of those compiler processes governed mostly by heuristics,
+the focus is a correct solution that isn't completely terrible, but doesn't
+exactly aspire to greatness.
+
+Spilling strategy to be used:
+
+  + variables that must be spilled to memory are marked by the pass that
+    computes the register map from variable liveness information; variables
+    may be mapped to different registers on different (disjoint!) intervals;
+    (DONE)
+
+  + the program representation, annotated with line numbers corresponding to
+    liveness intervals computed by the data flow analysis, is scanned and the
+    register map is applied to each instruction;
+
+  + if a variable has been mapped to a valid machine register, then the variable
+    name is replaced with a reference to the corresponding machine register;
+
+  + otherwise, if a variable has been marked spilled, some machine register
+    is chosen to be written out to a temporary location, and is then loaded
+    with the needed variable; once the instruction needing the value has been
+    executed, the register is restored to its original value;
+
+As a convention, three memory locations (SPILL1, SPILL2, SPILL3) will always
+be written to the object file; these will be used for the temporary storage
+of spilled values.  Since no more than three variables will need to be spilled
+for the execution of any given instruction, this should be sufficient.
+
+NOTE, however, that in programs with a large number of spilled variables used
+in continguous instructions will suffer a severe hit in performance; this
+will call for a much better spilling heuristic in the future.
+
+At any rate, it should be possible to base a decent spilling heuristic on
+some combination of guesses of for how many instructions to keep the spill
+active, and for which registers to spill out.  Thinking about how this would
+work, I can't help but come to the conclusion that any solution is going to be
+very markedly approximate.
+
+One proposed spilling heuristic:
+
+  + on encountering a spilled variable V at instruction N, take the longest
+    consecutive sequence of instructions following (and including) N that does
+    not cross the boundary of a basic block AND does not involve another spill;     this is the domain of the spill;
+
+  + determine which machine registers are unused on the interval on which
+    the spill occurs; if enough are available (which should be no more than 3)
+    then insert spill instructions before and after this interval;
+    otherwise, spill only before and after the affected instruction;
+
+... however, this introduces a great deal (!) of extra complexity into the code;
+suggest sticking to the one-spill-one-instruction approach which will be
+considerably simpler to implement.  Moreover, the several pathological cases,
+involving many unnecessary loads and stores should actually be fairly easy
+to detect and optimize away.
+
+Implemented one-spill-one-instruction approach, and left sketches of the
+improved heuristic in the code.
+
+Changed the 'VReg' sum type so that machine registers ('MReg') can be packacked
+as a 'VReg'; since VReg is the argument type of the SAL instruction set, this
+should save a lot of needless fucking around when it comes to mapping over
+virtual to actual registers.  In particular, would like to:
+
+  + map machine registers over virtual registers in the SAL representation;
+  + add spill instructions where necessary;
+  + map SAL instructions to native assembly codes;
+
+One quirk that remains is dealing correctly with the spills and restores
+preceding and following context switches; these are marked before the register
+map is constructed.  While I don't think this is problem, need to prove this
+to myself before proceeding.
+
+Make sure 'R_Spill' maps to Microblaze 'r0', as it's currently being used as
+a constant zero.
+
+
+----------------------------------------------------------------------
+-- 2010.11.18
+----------------------------------------------------------------------
+
+Finished top level call for the register allocator, and hooked it in to
+the chain of compiler phases.  Still debugging.
+
+Observed a failed live-interval lookup in the register allocation pass;
+it appears to correspond to an initial clearing of the IMR.  In the context
+of the current (very simple) test program, hypothesize that the IMR-clear
+results in a failed lookup because the test program has trivial scheduling
+behavior and only one atom, a side-effect of which is that IMR is deffed but
+never used, causing it to be omitted from the live variable annotations.
+
+Suggest locating the assignment to IMR and ensuring that it compiles to
+to the special 'IMR_Clr', which was designed for this purpose, and which should
+deal with the problem.
+
+Also observed some variables (namely 'R_Ret') being allocated multiple
+registers.
+
+Today:
+
+  + double-check compilation of assignments to IMR, and change them to map
+    to the distinguished IMR instructions;
+
+  + make sure no other registers are being left out by the liveness analysis;
+
+  + track down and remove duplicate register allocations;
+
+  + Add another pass over the intermediate representation that replaces 
+    'Store' with 'Mov' when both variables are already resident in registers;
+
+Changed compilation of RSI assignments to 'IMR' so that an IMR_Clr or IMR_Set
+is invoked instead of a 'Load' or a 'Mov'.  Because the assignment may have
+a variable argument, this is done with a branch; if the assignment is zero,
+IMR is cleared; otherwise, it is set.
+
+Will probably have to do something similar for assignments to INR.
+
+Some aggressive debugging of the liveness analysis.  All of the bugs located
+so far, however, were traced back to small oversights in the RSI -> SAL
+code generation phase, which were resulting in erronesouly orphaned registers,
+which the liveness analysis correctly judged to be dead references.
+
+LATER:
+
+Began work on the Microblaze instruction selector.  What has become immediatley
+obvious is the need to propagate some sort of type information down to this
+level (which I did not want to do!) because specific instructions are needed
+for specific data sizes.
+
+For now, will plow through to example code generation, which will give a
+scaffolding for working out the gritty details of bytes and half-words.

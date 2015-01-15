@@ -1,0 +1,17 @@
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+monad Re = ReactT Req Rsp K
+
+data Req = Cont
+         | Kill
+
+data Rsp = Ack
+         | Die
+
+main = resume_Re phi Ack
+
+phi :: (Re ())
+phi = signal Cont >>= \rsp -> return ()

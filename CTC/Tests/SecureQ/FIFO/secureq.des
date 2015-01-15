@@ -1,0 +1,155 @@
+-- ***********************
+-- Queue FSM
+-- ***********************
+-- Single FSM controlling
+-- both ENQ and DEQ ops
+-- ***********************
+CS: current_state;
+NS: next_state;
+
+GENERICS:
+ADDR_WIDTH, integer, 9;
+DATA_WIDTH, integer, 8;
+
+PORTS:
+data_in, in, std_logic_vector(0 to DATA_WIDTH-1);
+data_out, out, std_logic_vector(0 to DATA_WIDTH-1);
+empty_flag, out, std_logic;
+full_flag, out, std_logic;
+busy_flag, out, std_logic;
+enq, in, std_logic;
+deq, in, std_logic;
+
+CONNECTIONS:
+data_out        <= output;
+full_flag       <= full;
+empty_flag      <= empty;
+busy_flag       <= busy;
+
+MEMS:
+mem, DATA_WIDTH, ADDR_WIDTH;
+
+CHANNELS:
+
+-- FSM SIGNAL DEFINITIONS - name, type
+SIGS:
+local_data, std_logic_vector(0 to DATA_WIDTH-1);
+empty, std_logic;
+full, std_logic;
+busy, std_logic;
+output, std_logic_vector(0 to DATA_WIDTH-1);
+head_ptr, std_logic_vector(0 to ADDR_WIDTH-1);
+tail_ptr, std_logic_vector(0 to ADDR_WIDTH-1);
+
+-- FSM INITIAL STATE
+INITIAL: make_secure;
+
+-- FSM STATE TRANSITIONS - from -> to 
+TRANS:
+
+make_secure -> scrub_ram where
+{
+    -- Assert busy
+    busy'   <= '1';
+
+    -- Initialize last RAM entry
+    mem[ALL_ONES]   <= ALL_ZEROS;
+
+    -- Reset address counter
+    tail_ptr'       <= ALL_ZEROS;
+
+    -- Set "stop" point
+    head_ptr'       <= ALL_ONES;
+}
+
+-- Initialize all RAM entries and then go to reset state
+scrub_ram | ( tail_ptr < head_ptr) -> scrub_ram where
+{
+    mem[tail_ptr]   <= ALL_ZEROS;
+    tail_ptr'       <= tail_ptr + 1;
+}
+scrub_ram -> reset
+
+reset -> idle where
+{
+    -- Initialize all local signals
+    local_data'     <= ALL_ZEROS;
+    output'         <= ALL_ZEROS;
+    head_ptr'       <= ALL_ZEROS;
+    tail_ptr'       <= ALL_ZEROS;
+    empty'          <= '1';
+    full'           <= '0';
+} 
+
+
+idle | (enq = '1') -> enqueue where
+{
+    -- Assert busy
+    busy'       <= '1';
+
+    -- Store data to be ENQ'ed
+	local_data'	<= data_in;
+}
+idle | (deq = '1') -> dequeue where
+{
+    -- Assert busy
+    busy'       <= '1';
+
+    -- Move pointer to next queue entry
+	head_ptr' <= head_ptr + 1;
+
+    -- SECURITY : Zero out current queue entry
+    mem[head_ptr]   <= ALL_ZEROS;
+}
+idle -> idle where
+{
+    -- De-assert busy
+    busy'   <= '0';
+}
+	enqueue | (full = '0') -> update_status where
+	{
+	    -- Store data in queue
+		mem[tail_ptr] <= local_data;
+
+        -- SECURITY : clear local data
+        local_data' <= ALL_ZEROS;
+	
+	    -- Update tail pointer
+		tail_ptr' <= tail_ptr + 1;
+	}
+    enqueue -> update_status
+
+
+	dequeue | (empty = '0')-> update_status where
+	{
+	    -- Update current value at head of queue
+		output'	<= mem[head_ptr];
+	}
+    dequeue -> update_status
+
+-- If head pointer and tail pointer are the same
+-- then the queue is empty
+update_status | (head_ptr = tail_ptr)-> idle where
+{
+    empty'  <= '1';
+    full'   <= '0';
+    busy'   <= '0';
+}
+-- If the tail pointer "will" (is about to) wrap around
+-- to be the same as the head pointer, then the queue is full
+update_status | (head_ptr = (tail_ptr + 1)) -> idle where
+{
+    empty'  <= '0';
+    full'   <= '1';
+    busy'   <= '0';
+}
+-- Otherwise the queue is neither full nor empty
+update_status -> idle where
+{
+    empty'  <= '0';
+    full'   <= '0';
+    busy'   <= '0';
+}
+
+VHDL:
+

@@ -1,0 +1,86 @@
+monad TCM = EnvT(CtsSrcPos) SrcPos + EnvT(BindEnv) BindEnv + EnvT(FunEnv) FunEnv + EnvT(MonadEnv) MonadEnv + EnvT(DTEnv) DTEnv + EnvT(Maybe Kappa) Kappa + ErrorT(String) TypeError
+
+--
+-- NOTE: Due to a limitation in MonadLab you will have to take the output
+-- TypeChecker.hs and change this line:
+--
+--     module TypeCheckerMonad where
+--
+-- to:
+--
+--     module CT.TypeCheckerMonad where
+--
+
+import CT.Syntax
+
+type BindEnv = [Binding]
+
+data Binding = Binding {
+   bindingName :: CtsIdent,
+   bindingTy   :: CtsType
+} deriving Show
+
+type FunEnv = [FunSpec]
+
+data FunSpec = FunSpec {
+   funSpecName   :: CtsIdent,
+   funSpecArgTys :: [CtsType],
+   funSpecRetTy  :: CtsType
+} deriving Show
+
+type MonadEnv = [MonadNPM]
+
+data MonadNPM = MonadStep {
+                   monadStepBaseMonad     :: CtsIdent,
+                   monadStepResultMonad   :: CtsIdent
+                }
+              | MonadGet {
+                   monadGetMonad          :: CtsIdent,
+                   monadGetStateName      :: CtsIdent,
+                   monadGetStateType      :: CtsType
+                }
+              | MonadPut {
+                   monadPutMonad          :: CtsIdent,
+                   monadPutStateName      :: CtsIdent,
+                   monadPutStateType      :: CtsType
+                }
+              | MonadReadHeap {
+                   monadReadHeapMonad     :: CtsIdent,
+                   monadReadHeapName      :: CtsIdent
+                }
+              | MonadStoreHeap {
+                   monadStoreHeapMonad    :: CtsIdent,
+                   monadStoreHeapName     :: CtsIdent
+                }
+              | MonadGetreq {
+                   monadGetreqMonad       :: CtsIdent,
+                   monadGetreqResultMonad :: CtsIdent,
+                   monadGetreqReqType     :: CtsType
+                }
+              | MonadIsDone {
+                   monadIsDoneMonad       :: CtsIdent,
+                   monadIsDoneResultMonad :: CtsIdent
+                }
+              | MonadPutrsp {
+                   monadPutrspMonad       :: CtsIdent,
+                   monadPutrspResultMonad :: CtsIdent,
+                   monadPutrspRspType     :: CtsType
+                }
+              | MonadSignal {
+                   monadSignalMonad       :: CtsIdent,
+                   monadSignalReqType     :: CtsType,
+                   monadSignalRspType     :: CtsType
+                }
+              deriving Show
+
+type DTEnv = [DTSpec]
+
+data DTSpec = DTSpec {
+   dtSpecName  :: CtsIdent,
+   dtSpecCtors :: [CtsConDecl]
+} deriving Show
+
+data Kappa = Kappa {
+   kappaName   :: CtsIdent,
+   kappaArgTys :: [CtsType]
+} deriving Show

@@ -1,0 +1,7 @@
+monad EM = EnvT(Environment) Environment + EnvT(Functions) Functions
+
+import CT.Syntax
+
+type Environment = [(CtsIdent,CtsExpr)]
+type Closure = (CtsExpr,Environment)
+type Functions = [(CtsIdent,([CtsIdent],CtsExpr))]

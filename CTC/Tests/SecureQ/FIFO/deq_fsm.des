@@ -1,0 +1,88 @@
+-- ***********************
+-- Queue FSM
+-- ***********************
+-- Single FSM controlling
+-- both ENQ and DEQ ops
+-- ***********************
+CS: current_state;
+NS: next_state;
+
+GENERICS:
+ADDR_WIDTH, integer, 9;
+DATA_WIDTH, integer, 8;
+
+PORTS:
+deq, in, std_logic;
+data_out, out, std_logic_vector(0 to DATA_WIDTH-1);
+empty_flag, in, std_logic;
+deq_busy_flag, out, std_logic;
+head_ptr_out, out, std_logic_vector(0 to ADDR_WIDTH-1);
+
+CONNECTIONS:
+data_out        <= output;
+deq_busy_flag   <= deq_busy;
+head_ptr_out    <= head_ptr;
+
+MEMS:
+mem, DATA_WIDTH, ADDR_WIDTH, EXTERNAL;
+
+CHANNELS:
+
+-- FSM SIGNAL DEFINITIONS - name, type
+SIGS:
+deq_busy, std_logic;
+output, std_logic_vector(0 to DATA_WIDTH-1);
+head_ptr, std_logic_vector(0 to ADDR_WIDTH-1);
+addr_ptr, std_logic_vector(0 to ADDR_WIDTH-1);
+
+-- FSM INITIAL STATE
+INITIAL: make_secure;
+
+-- FSM STATE TRANSITIONS - from -> to 
+TRANS:
+
+make_secure -> reset where
+{
+    -- RAM scrubbing is handled by ENQ-FSM
+}
+
+reset -> idle where
+{
+    -- Initialize all local signals
+    output'         <= ALL_ZEROS;
+    head_ptr'       <= ALL_ZEROS;
+    addr_ptr'       <= ALL_ZEROS;
+} 
+
+
+idle | (deq = '1') -> dequeue where
+{
+    -- Assert deq_busy
+    deq_busy'       <= '1';
+
+    -- Move pointer to next queue entry
+	head_ptr' <= head_ptr + 1;
+
+    -- SECURITY : Zero out current queue entry
+    mem[head_ptr]   <= ALL_ZEROS;
+}
+idle -> idle where
+{
+    -- De-assert deq_busy
+    deq_busy'   <= '0';
+}
+	dequeue | (empty_flag = '0') -> update_status where
+	{
+	    -- Update current value at head of queue
+		output'	<= mem[head_ptr];
+	}
+    dequeue -> update_status
+
+update_status -> idle where
+{
+    -- De-assert busy signal
+    deq_busy'   <= '0';
+}
+
+VHDL:
+

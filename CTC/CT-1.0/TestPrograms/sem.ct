@@ -1,0 +1,83 @@
+
+
+monad K = StateT(Int) G + StateT(Bool) Sem
+
+monad R = ResT K
+
+monad Re = ReactT Req Rsp K
+
+data Req = Grab
+         | Release
+
+data Rsp = Grant
+         | Deny
+
+
+main :: (R ())
+main = step_R (put G 0) >>
+       ((
+         loop_R
+         (\r ->
+           getreq (fst r) >>= \q ->
+           step_R (get Sem) >>= \ok -> 
+           if (q == Grab) && ok
+
+           then
+             step_R (put Sem False) >>
+             resume_Re (fst r) Grant >>= \t ->
+             return (snd r, t)
+
+           else
+             if (q == Release)
+             then step_R (put Sem True) >> return (snd r, fst r)
+             else 
+               resume_Re (fst r) Deny >>= \t -> return (snd r, t)
+
+         ) 
+       ) (odd, evn)) >> return ()
+
+
+odd :: (Re Int)
+odd = (
+        loop_Re
+        (\x ->
+          signal Grab >>= \rsp ->
+          if rsp == Grant
+
+          then
+            step_Re (
+              put Sem False >>
+              get G >>= \g ->
+              put G (g + 1) >>
+              return (2 * g + 1)
+            ) >>= \v -> 
+            signal Release >>
+            return v
+
+          else return x
+        )
+
+      ) 0
+
+evn :: (Re Int)
+evn = (
+        loop_Re
+        (\x ->
+          signal Grab >>= \rsp ->
+          if rsp == Grant
+
+          then
+            step_Re (
+              put Sem False >>
+              get G >>= \g ->
+              put G (g + 1) >>
+              return (2 * g)
+            ) >>= \v -> 
+            signal Release >>
+            return v
+
+          else return x
+        )
+
+      ) 0
+

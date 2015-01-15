@@ -1,0 +1,7 @@
+monad M = EnvT(Bindings) Env + StateT(Int) Sto + EnvT(TypeBindings) Typ + EnvT(Code) Code
+import Syntax
+type Bindings     = Var -> [Var]
+type Var          = String
+type TypeBindings = [(Name, CtType)]
+type Code         = [(Name, CtExp)]
+

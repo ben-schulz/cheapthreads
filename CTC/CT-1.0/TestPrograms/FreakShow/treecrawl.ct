@@ -1,0 +1,26 @@
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+data Tree = Branch Tree Tree
+          | Leaf Int
+
+
+main :: Tree -> (R Int)
+main tree = 
+
+  step_R(put G 0) >>
+
+  (fix (\k -> \t ->
+
+    case t of
+
+      (Branch r l) -> k r >>= \n ->
+                      k l >>= \m ->
+                      step_R(put G (n + m)) >>
+                      return (n + m)
+
+      (Leaf v)     -> return v
+
+  )) tree

@@ -1,0 +1,132 @@
+--
+-- this is /cheapthreads/CTC/CT-1.0/known_issues.txt
+--
+-- A continuously updated list of known bugs or issues in the
+-- CT front-end
+--
+-- See also /cheapthreads/CTC/CT-1.0/CT/ct.log.txt for more discussion
+-- of possible issues
+--
+-- IF YOU OBSERVE AN ISSUE WITH THE FRONT-END, PLEASE NOTE IT HERE.
+--
+-- Put here 2010.04.22
+--
+-- Schulz
+--
+ 
+
+----------------------------------------------------------------------
+-- 2010.04.22 (Schulz)
+----------------------------------------------------------------------
+
+  PARSER - Type signatures containing list types do not currently parse.
+           **** FIXED (2010.04.30) Schulz
+
+  PARSER - Function application spanning line breaks will not parse;
+           this is due to a difficult compromise that was necessary
+           in order to distinguish function applications.
+
+  TYPECHECKER - Handling of constructed types generally problematic.
+
+
+----------------------------------------------------------------------
+-- 2010.04.29 (Schulz)
+----------------------------------------------------------------------
+
+  PARSER - Type signatures containing solitary type variables (e.g.
+           "a -> b") do not parse
+
+  TYPECHECKER - reactive request and response types cannot be referenced
+                in type signatures
+
+
+----------------------------------------------------------------------
+-- 2010.04.29 (Schulz)
+----------------------------------------------------------------------
+
+  PARSER - Constructed types with arity > 0 do not parse unless
+           surrounded by parentheses, e.g. "a -> C b" will result in an error,
+           though "a -> (C b)" will generally be acceptable.
+
+
+----------------------------------------------------------------------
+-- 2010.05.06 (Schulz)
+----------------------------------------------------------------------
+
+  PARSER - signal declarations must be written so that at least one
+           space separates the '|' from the opening '('
+
+
+----------------------------------------------------------------------
+-- 2010.05.07 (Schulz)
+----------------------------------------------------------------------
+
+  PARSER - character literals do not parse
+
+
+----------------------------------------------------------------------
+-- 2010.05.08 (Schulz)
+----------------------------------------------------------------------
+
+  TYPECHECKER - Cannot reference reactive 'Req' or 'Rsp' types in
+                type declarations; this is due to a design flaw
+                that makes it difficult to distinguish 'Req' and 'Rsp'
+                as distinct types, apart from their 'signal' declaration.
+
+----------------------------------------------------------------------
+-- 2010.05.14 (Schulz)
+----------------------------------------------------------------------
+
+  PARSER - has been observed missing imbalanced parenthesis on rare
+           occasions, at least on in the context of a fixpoint-application;
+           this leads to parse errors.
+
+----------------------------------------------------------------------
+-- 2010.05.19 (Schulz)
+----------------------------------------------------------------------
+
+  TYPECHECKER - persistent but difficult to reproduce problems
+                involving lists of lists, especially in the context of ':'.
+
+  UNCASE - there is reason to believe that this function may diverge
+           on some inputs
+           **** FIXED (2010.05.20) Schulz
+
+
+----------------------------------------------------------------------
+-- 2010.07.07 (Schulz)
+----------------------------------------------------------------------
+
+  TYPECHECKER - type variables in tuples and from applications of 'fst'
+                and 'snd' sometimes fail to resolve; other usages of these
+                sometimes result in type errors.
+                **** FIXED (2010.07.07) Schulz
+
+
+----------------------------------------------------------------------
+-- 2010.08.23 (Schulz)
+----------------------------------------------------------------------
+
+  TYPECHECKER - type checker may require parentheses in order to
+                correctly type some monadic terms; this is not really
+                a bug, as the terms do type correctly if the grouping
+                implied by parentheses is followed, but it may be confusing.
+
+----------------------------------------------------------------------
+-- 2010.09.21 (Schulz)
+----------------------------------------------------------------------
+
+  TYPECHECKER - the Req-Rsp arguments of reactive resumptions do not always
+                resolve to an explicit type, especially in the absence
+                of an explicit type;
+                declaration
+
+
+----------------------------------------------------------------------
+-- 2010.12.27 (Schulz)
+----------------------------------------------------------------------
+
+  BACKEND - liveness analysis fails (orphaned live intervals) for at least
+            some case expressions, e.g. 'TestPrograms/case.ct'
+
+-- THIS IS THE END OF THE FILE --

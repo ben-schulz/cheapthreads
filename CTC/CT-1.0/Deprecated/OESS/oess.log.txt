@@ -1,0 +1,224 @@
+--
+-- this is ~/cheapthreads/CTC/CT-1.0/CT/OESS/oess.log.txt
+--
+-- a development log for ETIC-redux,
+-- i.e. the operational execution-stream semantics
+--
+-- put here 2010.06.15
+--
+-- Schulz
+--
+
+----------------------------------------------------------------------
+-- 2010.06.15
+----------------------------------------------------------------------
+
+ETIC was originally conceived as a modification to Palsberg's
+typed interrupt calculus (TIC) tailored to the purpose of an intermediate
+representation for the CT compiler. A number of important questions about
+the differences need to be answered before implementation can begin.
+In particular:
+
+  + TIC is designed for programs that never terminate; CT programs,
+    and thus ETIC program, may terminate.  How is this distinction dealt with?
+
+  + Does the ETIC type system need to employ dependent types, as in TIC proper?
+
+  + Is the stack in ETIC primitive?  What is stored on it?  How is this
+    specified in the syntax?
+
+  + How can the interrupt calculus presented in TIC specify atomicity?
+
+  + Is it strictly necessary to ensure bounded stack size?
+
+  + Is there too much slack in the TIC type-system?  Can it be tightened
+    if necessary?
+
+  + What is the (virtual) architecture of ETIC, i.e. what special registers
+    are expected, similar to 'imr' in ETIC?
+
+  + CT entails resumptions-as-values; by what mechanism are these values
+    manipulated in ETIC?
+
+
+----------------------------------------------------------------------
+-- 2010.06.21
+----------------------------------------------------------------------
+
+Another issue from CT, which will have implications for ETIC: what constraints,
+if any, are there on recursion in CT?  In ETIC?
+
+And an important theoretical question: does the "resumption deconstruction"
+morphism point both ways?  I.e., if we can take the "next" action of a
+resumption, can we also take the "remainder" of a resumption coming after?
+
+
+----------------------------------------------------------------------
+-- 2010.06.24
+----------------------------------------------------------------------
+
+Ideally, the new intermediate representation will make an unambiguous
+distinction between the global execution trace, individual threads, and
+stored imperative code.  This raises several issues for CT, since CT is
+written in such a way that the simple imperative code admits no control-flow
+structures.
+
+Restructred the top-level stream so that it may consist of sequential actions,
+or a loop.  Discussions with Bill have reached the consensus that all
+control flow (other than simple if-then-else branches) should occur at the
+stream level, with none at the 'statement' i.e. imperative code level.
+
+
+----------------------------------------------------------------------
+-- 2010.06.25
+----------------------------------------------------------------------
+
+Began sketching out the code for the transformation from CT to OESS,
+beginning with the obvious cases of the imperative statements.
+
+After some deliberation, I believe I have worked out a transformation
+for 'fix' that will address some of the difficult issues laid out in
+the 'FreakShow' examples (specifically 'localcolor.ct'), as well as
+permit "structurally bounded" (i.e. primitive) recursion in CT.
+
+Care has been taken to preserve the locality of branches in the compiled
+state monad, similar to what was done in the defunctionalizer; the two
+branches of an 'if-then-else' are expected to converge on a common point.
+This preserves the 'diamond' property similar to that in "Synthesis of
+Distributed Algorithms Using Asynchronous Automata" (Stefanescu, Esparza,
+Muscholl 2003).  As such, the compiler suffixes the imperative code produced
+for a state-typed 'if-then-else' with a NOP, as a placeholder for resuming
+execution.
+
+Need to add imperative code primitives for manipulating thread-control blocks.
+
+
+----------------------------------------------------------------------
+-- 2010.06.29
+----------------------------------------------------------------------
+
+Discussions with Bill have determined that we do NOT want a general
+fixpoint function implemented at the level of the kernel execution stream,
+i.e. in terms typed 'R'; suggest an alternative semantic formulation as follows:
+
+**** SEE BELOW (2010.07.01)
+
+  data (Monad m) => ResT m a = Done a | Break | Pause (m (ResT m a))
+
+  instance Monad m => Monad (ResT m) where
+    return v       = Done v
+    Done v >>= f   = f v
+    Break >>= _    = Break
+    Pause m >>= f  = Pause (m >>= \r -> return (r >>= f))
+
+  tailfix :: (Monad m) => ResT m a -> ResT m a
+  tailfix r = r >>= \v -> tailfix r
+
+
+The function 'tailfix' simply replicates the given term indefinitely, while
+'Break', which is the natural mzero of (ResT m), allowing applications of
+'tailfix' to possibly terminate at runtime.  The semantics of 'tailfix' should
+induce all the desire properties, i.e. constant-bounded code size, with no
+need for a stack.
+
+**** SEE BELOW (2010.07.01)
+
+----------------------------------------------------------------------
+-- 2010.07.01
+----------------------------------------------------------------------
+
+Revised tail-recursive resumptive fixpoint as a lifting into 'Maybe',
+i.e. with the semantic definition:
+
+  loop_R :: ResT m (Maybe a) -> ResT m ()
+  loop_R r = r >>= \v -> case v of
+                           Nothing -> return ()
+                           Just v  -> return v >>= loop_R r
+
+  break :: ResT m (Maybe a)
+  break = return Nothing
+
+with an analogous definition for 'ReactT'.  Note that the semantics of
+'break' as defined thus differ from the typical usage in C; the break
+only takes effect if it is the last action executed before the implicit
+tail-call.
+
+Added simple tail-recursive loop structures to the CT front-end, and
+the OESS syntax.  Note that the syntax for streams is almost identical to that
+for threads, except that threads make system calls.
+
+A sketch of the rules for type-directed compilation:
+
+  + All R-terms are compiled into streams;
+
+  + A thread is created whenever an action of type 'R (Re a)' occurs in-stream;
+
+  + A context-switch (kernel-to-user) occurs whenever a term of type
+    'Rsp -> Re a' is applied to a term of type 'Rsp';
+
+  + A context-switch (user-to-kernel) occurs whenever reactive 'signal'
+    is called in a term of type Re;
+
+  + A thread is removed after its last action executes;
+
+  + An application of 'step' ('R' or 'Re') is compiled into a labelled action;
+
+  + Deconstruction of a resumption compiles to a read of the thread-local
+    program counter and/or signal register(s);
+
+  + All K-terms are compiled into stored code;
+
+  + All non-monadic expressions must compile into primitive expressions, or be
+    partially evaluable into expressions that do;
+
+
+----------------------------------------------------------------------
+-- 2010.07.05
+----------------------------------------------------------------------
+
+Added "jump to subroutine" to the top-level stream, as well as to threads
+and imperative code.  The semantics of this are straightforward; the
+referenced code is executed, and its result put in 'R_Ret'.
+
+
+----------------------------------------------------------------------
+-- 2010.07.06
+----------------------------------------------------------------------
+
+Work on 'compile_any', which is necessary in order to compile arbitrarily
+typed code that may appear, for instance, as arguments in a function app.
+Strategy for this will entail passing necessary references to the compiled
+code, i.e. TIDs, labels, or actual expressions, to the call.
+
+Still need to formalize this; however, delaying until I have all the pieces,
+measured by hand-compiling a simple-but-complete example, such as TwistKernel.
+
+*** IMPORTANT ***
+By convention, the TID counter is read and then incremented when creating
+a new thread.
+
+Finished writing function application for R-typed terms; this is somewhat
+complex, though the complexity is not surprising.  Functions are reduced
+to the level of subroutines, in that their parameters (which are assumed
+to be set aside in memory) are explicity bound with the appropriate values
+before the jump to the code of the function body occurs.  References, however,
+may direct to simply expressible values (i.e. 'Expr'), to labeled blocks of code
+(which much be compiled AND placed in memory at load-time), or to threads,
+which must be IDed and created.
+
+----------------------------------------------------------------------
+-- 2010.07.08
+----------------------------------------------------------------------
+
+Restructured the compilation functions to return labeled blocks of code,
+together with an accumulating "code pile" of blocks that must be produced
+because they are referenced within primary code produced by the function.
+
+This is less complicated than it sounds; arguments to functions, for instance,
+may be typed R, Re, or K, in which case they reference threads or imperative
+code blocks which may themselves need to be compiled and added to the output.
+
+Presently suspending the implementation for further planning; Bill has the
+idea of expressing the monadic semantics in terms of a typed assembly
+language (TAL-0 or TAL-1), and some further deliberation is needed in order
+to ensure that the intermediate representation has the desired properties.

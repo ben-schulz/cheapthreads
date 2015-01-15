@@ -1,0 +1,21 @@
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main :: (R ()) -> (R ())
+main phi =
+
+    (fix (\k -> \x ->
+    
+      (nextOf x) >>= \y ->
+      x >> y >> k x          -- What context does 'y' run in? 'x'?  'k x'?
+
+    )) phi
+
+
+nextOf r =
+  case r of
+    (Pause x) -> step_R x
+    (Done a)  -> step_R (return a)
+

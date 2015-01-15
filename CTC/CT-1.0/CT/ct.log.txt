@@ -1,0 +1,2649 @@
+--
+-- this is ~/cheapthreads/ctc_working/CT-1.0/CT/ct.log.txt
+-- 
+--
+-- development log for the CT compiler overhaul
+--
+-- put here 2010.01.10
+--
+-- Schulz
+--
+
+----------------------------------------------------------------------
+-- 2010.01.01
+----------------------------------------------------------------------
+
+First pass at a revamped abstract syntax, in './Syntax.hs'.  This is
+similar to Adam's abstract syntax, but differs in several respects.  Firstly,
+an attempt has been made to arrange the grammar in a way that will
+more easily admit future changes, especially to primitive operations.  The
+old abstract syntax became very messy due to many after-thought additions
+that simply weren't anticipated.
+
+Starting point for the grammar is the one given in the DSLWC'09 paper
+(Harrison et al), though several extensions to it are necessary, namely:
+
+(1) A mechanism for local, conditional branches is needed.
+
+(2) At least some portions of the state monad layer need some notion of
+    addressability, which will almost certainly need to be reflected in
+    the syntax.
+
+(3) Reactive resumptions need to be more fully and more generally represented,
+    and this certainly entails syntactic changes.
+
+Some other minor changes inspired by the headache of writing non-trivial
+programs in the original CT syntax (both concrete and abstract) have also
+been made, though these are largely cosmetic.
+
+Currently planning on a minimal, but still complete and working rewrite of the
+parser and type-checker.  Adam's front-end also contains a recursion analyzer
+and a partial evaluator, but these should be strictly necessary in order to
+have a front-end that capable of producing a ready-and-working AST.
+
+
+----------------------------------------------------------------------
+-- 2010.01.02
+----------------------------------------------------------------------
+
+Found a solution the "addressable state" problem; it appears that there is
+a sound basis for claiming that we can address particular state layers
+without breaking the desired monadic abstraction.  An example (in Haskell)
+is given in '~/cheapthreads/CTC/CT-1.0/TestPrograms/addressing.hs'.
+
+Added "addressable-get" and "-put" to the abstract syntax.  These look like:
+
+  deref mem_name address_expr
+
+and
+
+  point mem_name address_expr value
+
+respectively (as in "dereferencing a pointer" to get a value and "pointing"
+to the new value stored at the given address).
+
+
+----------------------------------------------------------------------
+-- 2010.01.03
+----------------------------------------------------------------------
+
+Began early work on the parser.  The goal is for the syntax to remain a proper
+subset of Haskell (given the appropriate definitions for the built-ins)
+without having to go through the Haskell parser proper, which made the old
+parser code somewhat obscure and difficult to modify.
+
+----------------------------------------------------------------------
+-- 2010.01.04
+----------------------------------------------------------------------
+
+Refactoring the left-recursion out of the current expression grammar;
+trying to do this in such a way that we retain a humanly sensible AST
+at the top level, without causing the parser to get lost in a cycle.
+
+Got rid of the generic application production in the expression syntax;
+this never seems to be used since lambdas only occur inside bind and fix.
+Parsing 'expr expr' would have been a needless headache.
+
+----------------------------------------------------------------------
+-- 2010.01.05
+----------------------------------------------------------------------
+
+Successfully implemented the arithmetic expression parser.  This has a
+simple two-layer structure allowing for only high- or low-precedence
+infix operators; prefix operators are treated as high-precedence.  Though
+this is a very spare grammar, it is sufficient for now and the structure
+can naturally be extended to accomodate additional levels of precedence.
+
+Nearly finished the top-level expression parser; a little more factoring of
+the grammar is needed in order to get fully general chain-parsing, and
+a few functions are still needed in order to convert between the factored-
+and nonfactored grammars.
+
+----------------------------------------------------------------------
+-- 2010.01.06
+----------------------------------------------------------------------
+
+Finished implementing the expression parser; testing so far reveals no
+bugs, though more extensive testing is called for.
+
+Need to finish conversion between factored and non-factored grammars;
+the factored grammar parses, but is somewhat difficult to understand
+without careful examination.
+
+Talked to Ian about compiling the 'signal' construct.  Came to the conclusion
+that (1) 'Req' and 'Rsp' types need to be present in any program that uses
+signalling, and (2) there needs to be a set of 'Req' and 'Rsp' primitives with
+well-defined semantics.
+
+LATER:
+
+Finished conversion between factored and non-factored grammars.  Implemented
+a simple preprocessor that strips comments out of the input.  Implemented
+the function declaration parser.  Minor tweeks, and clean-up of the
+expression grammar as needed.
+
+As a method of informal verification, trying to use raw parser output as
+parser input; currently, the parser chokes on the parentheses surrounding
+the state layer identifier following "get" and "put".  Though the parentheses
+themselves could simply be removed from the 'Show' instance / pretty printer,
+they indicate the path the parser is taking through the grammar.  For instance,
+the parser sees "get G" as 'get' applied to an expression consisting of 'G'.
+This is tricky because 'G' is not supposed to be an expression as such; the
+spot is reserved for monad layer identifiers only.
+
+This is not an extremely serious issue, and I may ignore it for now; the parser
+works for the function declarations that I have so far written by hand.
+
+
+----------------------------------------------------------------------
+-- 2010.01.07
+----------------------------------------------------------------------
+
+Partially implemented a top-level parser and hooked it up to the tester.
+Parser implements function declarations and type signatures; remaining
+declarations to follow soon.
+
+Parser now accepts its own output for at least one test program.
+
+Implemented monad layers, but parser seems to have trouble detecting
+the end of a monad layer declaration.
+
+LATER:
+
+Fixed aforementioned problem with successive monad declarations.  There is a
+small quirk in the syntax of 'React', namely that two type constructors are
+expected as the first two arguments, to act as 'Req' and 'Rsp'.  This is
+a minor work-around, as trying to apply the general type parsers
+('ctty' or 'tyterm') fails to distinguish the arguments as separate
+identifiers, as opposed to arguments to a single constructor.
+
+Parser now accepts a syntactically complete, albeit minimal, CT program.
+
+Implemented parsing of data declarations and type synonyms.
+
+
+----------------------------------------------------------------------
+-- 2010.01.08
+----------------------------------------------------------------------
+
+Fixed some bugs that Adam had pointed out.  Namely:
+
+  + Expressions ending in an identifier and followed by a new function
+    declaration were trying to parse as function application, and failing.
+    Fixed this by requiring than an identifer in an application NOT be
+    followed by '='.
+
+  + A typographical error in 'Factored.hs' was causing the last
+    operand in a chained arithmetic expression to appear in duplicate,
+    replacing the penultimate operand.  Fixed the typo.
+
+  + Unary operations were not being handled correctly.  Added another
+    case to 'fexpr' in 'Parser.hs' to handle them.
+
+Also tweeked the top-level so that the parser no longer crashes unexpectedly
+into EOF, which it had been doing sporadically.
+
+Still need to implement fixpoint, if-then-else and some necessary primitives,
+i.e. the equality/inequality tests. These should comprise straightforward
+additions to the existing parser.
+
+LATER:
+
+Started the if-then-else parser.  There are some issues with detecting
+the end of the expression; I'm too tired to code effectively right now,
+so this will have to be worked out later.
+
+
+----------------------------------------------------------------------
+-- 2010.01.11
+----------------------------------------------------------------------
+
+Massive overhaul (spanning three days) of the parser and factored grammar.
+
+Motivation for the overhaul was the foreseeable need to extend the
+grammar with new primitives etc. in the future; this made the clunky
+and highly specific term structure of the preceding grammar seem
+unreasonably frail.
+
+New factored grammar is based on a simplification of the Haskell expression
+grammar given in the Haskell 98 Report.  The new grammar and parser
+structure gives a cleaner and more general represenation of precedence and
+lays the foundation for a more precise treatment of associativity and
+fixity as may be needed.
+
+Parser now works for keyword-delimited expressions, handles chained
+function applications and now correctly associates application to the left.
+
+Unfortunately, changes still interact with the existing high-level
+declaration parsers in some difficult ways, though these should be ironed
+out.
+
+Expression parser needs to be extended with special cases for bind
+operations; although these correctly parse, the parser is currently
+not expecting the lambda syntax that usually attends a bind.  The special-
+case parsers for 'put' and 'get' applications will also likely
+need to be adapted to the new syntax.
+
+
+----------------------------------------------------------------------
+-- 2010.01.12
+----------------------------------------------------------------------
+
+Tied up loose ends from the parser overhaul, particularly those
+involving (1) constructor application, (2) binds and lambdas, and (3)
+delimiting expressions from declaration headers.
+
+Made both factored and non-factored grammar slightly more permissive,
+in that lambdas are now unconstrained top-level expressions.  This makes
+both the grammar and the parsing procedure somewhat more natural.  Although
+the use of lambdas in CT does need to be constrained to 'bind' and 'fix',
+such a constraint may be better enforced by a static check following the
+parser.  In particular, this check might be performed by the type-checker,
+or implicitly at the level of conversion between expressions in the factored
+grammar and expressions of type 'CTExpr'.
+
+Constructors are now treated as atoms, and may be applied like functions;
+in general, they will be parsed in exactly the same way as variables
+when they appear in expressions.
+
+Fixed problem with delimiting expressions and declarations.  This is
+easily accomplished by applying the rule that:
+
+  * function applications extend as far to the right as possible,
+    ending at the first 'AExpr' followed by '=' or '::'
+
+Parser now accepts syntactically complete programs again (it didn't
+for a short time after the overhaul), but now handles keyword-delimited
+expressions better than it did before.
+
+Need to build in some other special-purpose constructs, i.e. 'fix'.
+
+Suggest that 'get' and 'put' could become top-level expressions.
+
+Built prefix primitives into the general expression parser.
+The only prefix primitive currently used is arithmetic negation, but
+others should be easily added as needed.
+
+Added fixpoints.
+
+The factored grammar and the top-level grammar have become gradually
+more similar in structure, though the top-level grammar is still
+noticeably simpler.  Moreover, the translation between the two presents
+the opportunity for some simple static checks, and should make it easier
+to change concrete syntax details without disrupting the code.
+
+Deleted all old code in the parser and factored syntax, as it is
+no longer being used and was cluttering things up.
+
+Should change the mechanism by which comments are ignored, so that they
+no longer screw up the line numberings in parser errors.
+
+
+----------------------------------------------------------------------
+-- 2010.01.17
+----------------------------------------------------------------------
+
+Began implementation of the type inferencer.
+
+Settled polymorphic types; question of recursive types seems to remain open.
+
+Implemented a simple type unifier based on the naive algorithm appearing
+in "Design Concepts in Programming Languages" (13.3.2) by Turbak, Gifford
+and Sheldon.
+
+Haven't yet settled on an efficient data structure for annotating the AST
+with types; will probably use '(CTExpr x CTTy)'.
+
+Put down some type signatures for the built-in primitives; the type
+inferencer will use these when encountering a primitive operation.
+
+Considering strange way that the 'Eq' declaration for CTTy is used; it
+returns 'True' only for base types; it is assumed that all other types
+are unified using the function in the type checker.  This seems reasonable
+for now, but we may end up needing to test equality of types later on.
+
+----------------------------------------------------------------------
+-- 2010.01.18
+----------------------------------------------------------------------
+
+Implemented the beginnings of a type inferencer.
+
+Code so far only works for simple lambda expressions and primitive
+operations, but appears to give correct behavior.
+
+Inferencer is structured as a monadic interpreter (Wadler-style), using
+a layered state-environment monad that is used to generate new type
+variables and to track the types of identifiers in local type environments.
+
+Have not yet settled on how the AST will be type-annotated.
+
+----------------------------------------------------------------------
+-- 2010.01.19
+----------------------------------------------------------------------
+
+Fleshed in more of the type inferencer, though it still does not
+handle the full syntax tree.
+
+Currently using the convention that, for type-inference purposes, a
+monadic type, e.g. "M a", is identical to any other constructed
+type.  When reconstructing the type of a monadic term, the inferencer
+attempts to unify the type of the term with a constructed generic.  This
+still allows for checking the consistency of binds, etc., by requiring
+that all terms in a bind have types that unify to the same constructor.
+
+Actual monadic types are assumed to be directly checkable from the 'monad'
+declarations heading the program.  The same goes for constructors generally,
+as they are expected to be declared, and their declarations incorporated
+into the inference engine's initial type environment.
+
+Fixed a few minor bugs in the parser, and elaborated the transformation
+between the factored and top-level grammars so that special functions
+(e.g. 'step, 'put', et al) get translated into corresponding special
+productions in the top-level grammar.  This was necessary to move forward
+with the type inferencer, as it should expect certain kinds of types
+(i.e. monadic ones) for certain special functions.
+
+Built pairs into the parser, and made 'fst' and 'snd' primitives.
+
+LATER:
+
+Implemented support for case expressions and simple patterns.
+
+A few shortcuts were taken just to simplify things.  Namely,
+
+  (1) Nesting of case expressions is not supported.  A nested
+      case parses in a way that overrides all subsequent
+      case alternatives before the end of the enclosing case-expression.
+      For instance:
+
+        case x of
+          [ ]   -> [ ]
+          (_:t) -> case t of
+                     (h:_) -> ...
+
+          _     -> x
+
+      will parse as:
+
+        case x of
+          [ ]   -> [ ]
+          (_:t) -> case t of
+                     (h:_) -> ...
+                     _     ->
+
+
+      This is not consistent with the Haskell parser, but should not
+      present any serious problem at present, as equivalent programs
+      can be written using nested patterns, which are supported.
+
+  (2) Patterns support the cons (':') constructor, but the parser
+      presently requires that the left-hand side must be a variable,
+      literal, or wildcard.  This is because I didn't want to trouble
+      myself to build a real pattern grammar; there is no barrier
+      to doing so in the future.
+
+May go back and correct these deficiencies later.  For now, though,
+simple patterns and non-nested case expressions should parse.
+
+
+----------------------------------------------------------------------
+-- 2010.01.20
+----------------------------------------------------------------------
+
+Fixed parsing cons patterns (see preceding day).  Cons now works in conjunction
+with any other syntactically valid pattern.
+
+Case expressions now work correctly, with the stipulation that they
+not be nested (again, see above).
+
+Wrote a few more cases into the type inferencer, though it still only
+checks for well-typedness, as opposed to annotating the AST.
+
+----------------------------------------------------------------------
+-- 2010.01.21
+----------------------------------------------------------------------
+
+Things to do in order to finish the type inferencer:
+
+ (1) Build in annotation of the syntax tree, rather than just checking
+     for type unification;
+
+ (2) Collect all type declarations and include them as constraints
+     for the unifier;
+
+ (3) Extend the initial (effectively empty) environment with bindings
+     for state elements and anything else that's declared;
+
+
+----------------------------------------------------------------------
+-- 2010.01.25
+----------------------------------------------------------------------
+
+Fixed a simple coding error in the type checker that was preventing proper
+unification of type variables in some cases.
+
+Extended Eq declaration for CTTy to include all types; it now seems immediately
+obvious that there is no need to restrict the notion of equality in order for
+unification to proceed correctly, since a constraint involving two completely
+identical types can be discarded without consequence.
+
+Extended types so that monadic types are a distinguished case; this is
+conducive to unifying monadic types wherein the monad may be unspecified
+in one or both halves of the constraint.
+
+Implemented annotation of the AST.  Merged annotation with the type-inference
+function, so that the inference engine takes an ordinary, un-annotated
+expression and transforms it into an annotated structure at the same
+that it crawls the tree in order to gather type constraints.  Nodes of
+the tree are initially annotated with the strongest type that can be
+inferred (usually involving a type variable).  After the inferencer ('tyinfer')
+crawls the expression tree, its top-level call attempts to unify
+the constraints it has gathered.  A satisfiable set of constraints produces
+a substitution function that is recursively applied to the annotated syntax
+tree in order to resolve the type of each (sub-) expression of the tree.
+
+Still need to implement top-level interface calls to the expression
+type inferencer/annotator, as well as a processing phase that produces
+an environment of initial bindings for a full program.  Also need to
+make proper use of type declarations, when present.
+
+----------------------------------------------------------------------
+-- 2010.01.26
+----------------------------------------------------------------------
+
+Finished putting together a top level call for the type inferencer,
+and hooked it up into a rudimentary front-end.
+
+Unfortunately, attempting to run the front-end requires an exhorbitant
+amount of memory (more than 2 GB) and causes ghci to crash.
+
+While I am confident that the implementation of the front-end is
+essentially correct (disregarding the inevitable bug here and there),
+it is plainly unusable in this state and so cannot be tested as yet.
+
+Going to attempt to profile the program to get an idea of where
+changes must be made to bring down the memory footprint.
+
+LATER:
+
+Traced the problem to a sneaky coding bug, wherein lexical scoping rules
+lead to an infinite recursion.  Changing variable names so that they differed
+resolved the issue; the type-checker now goes through.  However, it does
+not appear to correctly type programs as-yet.  The good news, howver, is
+that we can now begin debugging it.
+
+LATER STILL:
+
+There appears to be a problem in the type unifier that causes some internal
+type variables to remain in the annotated AST.
+
+
+EVEN LATER STILL:
+
+After extensive changes to the data structures, implemented a solution to
+the lingering constructor variables.  This ultimately entailed unifying over
+a sum type consisting of either ordinary types OR monadic constructors.  This
+makes the code look somewhat messier, but does not substantially change
+its structure.  A few ordinary type variables still linger, usually in
+conjunction with a 'step' and a bind.
+
+More debugging to follow shortly.
+
+----------------------------------------------------------------------
+-- 2010.01.27
+----------------------------------------------------------------------
+
+Discovered cause of the unresolved type variables; problem traced back
+to substitutions of variables for variables in the solution function.
+In the instance of a type variable, the type substitution must be applied
+multiple times in order to ensure that transitive substitutions of
+variables for variables fully resolve.
+
+Front-end now appears to work for at least simple programs.
+
+Type signatures presently cause problems because monads parse as
+constructed types, but should parse as the distinguished monadic type.
+This will be easy to remedy, but still needs to be done.  For now,
+type signatures should be avoided.
+
+LATER:
+
+Fixed the aforementioned problem with type signatures.  Monadic types
+are still parsed as constructed types when appearing in type signatures
+(they are syntactically indistinct), but converted by the type-checker into
+expressly monadic types (there is a distinguished production of CTTy in Syntax)
+whenever their constructor matches an identifier in one of the declared monads.
+
+----------------------------------------------------------------------
+-- 2010.01.28
+----------------------------------------------------------------------
+
+Problem in unifying dslwc example seems to stem from 'fix'; will resolve
+this issue ASAP.
+
+Conversation with Bill suggests we should replace generic 'fix', which applies
+to generic recursion, to 'unfold', which is co-recursive and should be
+strictly tail-recursive.  For a definition, see "Proof Methods for
+Corecursive Program" by Jeremy Gibbons and Graham Hutton (2005).
+
+LATER:
+
+Working to iron out some bugs in the parser, specifically regarding 'case'
+expressions.  Discovered a strange bug wherein parenthesized expressions
+following the "->" in an alternative parse, but unparenthesized expressions
+do not.
+
+Also noticed that 'fix' correctly typechecks when given a lambda expression
+with two variables, but fails for any more than that.  This also points
+to an (irritating) bug that needs to be addressed.
+
+----------------------------------------------------------------------
+-- 2010.01.29
+----------------------------------------------------------------------
+
+Resolved the problem with fix; the constraints given were not correct,
+stemming from a subtle logical inconsistency with the actual type judgments
+given in the preliminary CT language spec.
+
+Observed that the parser doesn't yet handle type variables in type signatures;
+need to build this in, and make some appropriate adjustments in the
+typechecker as well.
+
+Traced the parsing bug in 'case' alternatives to function application; suspect
+that this has something to do with the way spaces are used to separate
+applications.  Fixed this by removing the requirement that case alternatives
+end in a newline; most likely, newline was being consumed during the
+search for function application arguments, which confused the 'casealt' parser.
+I would rather retain function application across line breaks and
+remove the requirement that case alternatives be followed by newlines.
+This is unlikely to result in parse ambiguities.
+
+----------------------------------------------------------------------
+-- 2010.02.01
+----------------------------------------------------------------------
+
+Implemented basic support for lists; this was straightforward, and so far,
+no problems have been observed.
+
+LATER:
+
+There IS a problem, and it can be directly observed in the treatment of
+empty and singleton lists.  Try this out; diagnose the bug.
+
+----------------------------------------------------------------------
+-- 2010.02.02
+----------------------------------------------------------------------
+
+Currently completing yesterday's start at list support.
+
+Also to do, following a discussion with Bill:
+
+  + Add support for the resumptive 'Pause' and 'Done' constructors
+    within patterns (but only patterns!) which will allow for testing
+    whether a thread has finished or not;
+
+  + Extend the permissible types in a state component to include
+    finite aggregates (e.g. pairs) as well as finite maps; this will
+    give us the basic components necessary for references, which will
+    solve the long-standing problem with constructing addressable
+    data structures;
+
+  + Sketch out support for special 'QueueT' etc. transformers, as
+    well as the possibility for multiple declared monads involving
+    the same transformer; more discussions with Bill needed in order
+    to determine where this is going;
+
+  + Twiddle the concrete syntax so that "get G" and "get_G" both parse,
+    and both parse to the same thing;
+
+LATER:
+
+Finished the list implementation; it was indeed straightforward, and
+appears to work correctly.
+
+
+----------------------------------------------------------------------
+-- 2010.02.03
+----------------------------------------------------------------------
+
+Extensive work to begin yesterday's directed changes;
+
+Improved and elaborated type inference for case expressions, so that
+patterns must now be consistent with the inferred type of the 'of'
+part of the 'case' expression.  Used this to implement distinguished
+'Pause' and 'Done' patterns.
+
+Discovered a number of bugs along the way, including at least one in the
+parser.  The latter involved mistaken parsing of parameters appearing
+in a function declaration (e.g. the 'x' and 'y' in "main x y = ...") as
+arguments in a function application.  This is because '=' was being
+used to catch a new function declaration, and thus distinguish its identifier
+from a variable argument.  Changed the parser so that function application
+does NOT span line breaks; I don't like this, since I enjoyed being able
+to do this, but removing this allowance fixes the bug.  As a concrete
+syntax feature, it does not seem important enough to impede progress.
+
+Close to compiling the 'Twist' kernel, though some issues remain involving
+the use of fixpoints, which is necessary in order to get the desired
+behavior.  Use of functions to test the 'doneness' of a thread, or to
+get its next action, however, seems to work.
+
+LATER:
+
+Slightly changed the output type of the type inferencer so that the
+type of a function itself is included; previously, only the type of the
+function body was included.  Made small changes to allow Ian to transition
+to the new structure whenever he is ready.
+
+It turns out that the problem in unifying the 'Twist' kernel is not the
+fixpoint, but the typing rules implemented.  I can't quite seem to square
+my understanding of these with what Bill's example seems to call for,
+and so I am currently waiting for a reply from Bill as to which rules are
+the correct rules.
+
+Also observed what appears to be an infinite recursion when running the
+original version of 'TwistAndShout.hs'; cannot quite trace the origin
+of this behavior, though suspect that it is related to the same typing rules
+mentioned above.  Need to keep an eye out for this behavior in case it should
+crop up again.
+
+----------------------------------------------------------------------
+-- 2010.02.04
+----------------------------------------------------------------------
+
+After discussion with Bill, changed the typing rules to correctly reflect
+what we want; in particular, we should have no restriction on the type
+variables in the judgment:
+
+  Gamma |- phi :: K a
+ _____________________
+  Gamma |- step phi :: R a
+
+so that, for instance, we can substitute
+
+  a |-> R b
+
+for the (universally quantified) variable 'a'.
+
+With this change, both Bill's example ('TwistAndShout.hs') and the modified
+example from Ian ('TwistKernel.hs') both work.
+
+Note that the modifications necessary to make this happen were actually
+quite minor, and really only required changes to the constraints produced
+by the type inference engine.  This strengthens my confidence that the
+code as-is has a fairly good structure.
+
+Also implemented the small change in concrete syntax Bill asked for;
+"get_G" parses to the same thing as "get G", and "put_G e" parses to
+the same thing as "put G e".
+
+----------------------------------------------------------------------
+-- 2010.02.08
+----------------------------------------------------------------------
+
+Began writing a simple inliner; work is mostly finished, but not quite
+all of the implementation has settled into place.
+
+The inliner is structured similar to the type-checker, in that it crawls
+the syntax tree interpreter-style, performing the needed transformations as
+it goes.  The transformations are two, namely:
+
+  (1) beta-reduction is performed on all applications, with the exception
+      of fix-points;
+
+  (2) fix-points appearing in an application are transformed into a new
+      production which includes the application arguments, i.e. the
+      application goes away and becomes a new syntactic object
+      that encompasses the arguments as members;
+
+Before inlining occurs, all declared functions are transformed into lambdas,
+where the parameters correspond to those in the function header, e.g.
+
+  f x y = e
+
+becomes:
+
+  f = \x -> \y -> e
+
+Inlining is then just repeated beta-reduction, collapsing all the functions
+together into one syntatic tree rooted in 'main'.
+
+The difficulty of fixpoints is that they encompass a lambda and, technically,
+denote a higher-order function.  We transform this away by removing any
+notion of fixpoints "being applied", and turn them into what is essentially
+a loop construct that specifies its initial states.
+
+Also made some changes to other data structures, again.  In particular,
+the type-checker now returns a pair consisting of the 'main' function,
+together with a list of all the other functions.  This removes the
+need for fucking around at each stage of the compiler, searching through
+the list of declarations for 'main'.
+
+----------------------------------------------------------------------
+-- 2010.02.09
+----------------------------------------------------------------------
+
+Finished implementing inliner; there are some quirks to how this is
+done, and the code could use some clean-up.  The basic strategy for
+inlining is this:
+
+List of function declarations is converted to a list of declarations in
+a syntax almost identical to ANAST; the only difference is that 'fix'
+includes an additional argument specifying a possibly empty list of initial
+loop variables.  Each function in the list is then transformed into a
+lambda expression as described above.  The inliner proceeds through the
+list of non-lambda transformed declarations, applying the current function
+environment to a function's body, and then updating the environment.
+
+One fine point here is that the main inlining engine, 'beta_rx' keeps
+an environment of lambdified variables, but operates on functions that
+have NOT been lambdified.  This is necessary because the beta-reducer
+expects there to be at least one argument-expression on the stack on
+encountering a lambda.  This is the only real sticking point, and
+is more or less related to our assumption that there are no higher-order
+functions, i.e. we should only ever see a lambda in the context of an
+application, in which case the inliner-interpreter will have at least
+one argument expression pushed onto the stack.
+
+Need to smooth out the edges, but the inliner more or less works.
+
+----------------------------------------------------------------------
+-- 2010.02.10
+----------------------------------------------------------------------
+
+Cleaned up the inliner code; assured myself that what it does is indeed
+simple and sensible and apparently correct.  Took out some of the junk
+code, and clarified the comments.
+
+We appear to be ready to start the defunctionalizer.
+
+----------------------------------------------------------------------
+-- 2010.02.12
+----------------------------------------------------------------------
+
+Laying the groundwork for the defunctionalizer;
+
+The new code will be very streamlined in comparison to the former code,
+which contains a great deal of wholly unnecessary complexity both in its
+algorithm and in its data structures.
+
+Some noteworthy changes that have already been determined:
+
+  + The "unremarkable expression evaluator" has been ommitted entirely;
+    just a little bit of thought makes it wholly unnecessary, since
+    expressions can be at most partially evaluated, and since FSMLang
+    will compile any expression legally typed in a 'get' or 'put'.
+
+  + Transitions have a much smaller and simpler structure.  In particular,
+    transitions of state (i.e. in K) require only one expression
+    (not two, as before) and transitions between states require only a
+    pair of program counter values with an optional guarding expression.
+
+Several other things that need to be thought about carefully:
+
+  + Should there we distinguished read-only and write-only components
+    of state that correspond to ports, etc., or is it more economical
+    (and still perfectly reasonable) to treat these as ordinary state
+    components?
+
+  + How should condition propagation be handled?  Note that since we
+    now permit 'if-then-else' expressions to occur anywhere in the AST,
+    we need some way to translate dual possibilities into explicit branches
+    in the transitions of the FSM.
+
+  + Can we fold certain aggregate data structures into ordinary state
+    elements that do NOT require the addition of a memory?  Consider,
+    for instance, that we can translate an N-tuple into N base-type elements
+    of the global (signal) state, and then simply translate all projections
+    into references to particular, non-aggregated state elements.
+
+  + Does the structure of CT allow us to use genuinely inductive datatypes
+    (e.g. lists) while still retaining assurances about the size of a
+    program's memory footprint?  I claim that a combination of typing
+    rules and restriction to tail-recursion would allow a straightforward
+    static analysis to determine how long a list could possibly grow;
+    assertions could then be used to check whether the list remains
+    within some prescribed bounds.  (Maybe, maybe not.)
+
+Also did some minor clean-up to tie up a few loose ends and tighten some
+minor structural things in the code that were irritating me.
+
+----------------------------------------------------------------------
+-- 2010.02.15
+----------------------------------------------------------------------
+
+Still working out the high-level strategy for the defunctionlization 
+process, currently concerned with propagating 'if-then-else' expressions
+upward through the syntax tree so that they can ultimately be expressed
+as guarded transitions in FSMLang.
+
+While I was at it, also folded all literals into a single sum-type in
+the main syntax; this was not a real issue, but for some reason it
+really bothered me.
+
+Adam asked for a primitive called "loadProcess" (which I subsequently
+shortened to "load"); because the nature of what this is supposed to do
+is not yet entirely clear, and because I didn't want to have to make
+more extensive changes than necessary, I added this as a unary primitive
+operation.  It can be promoted (without too much extra work) to its own
+syntactic production, if need be, later on.
+
+LATER:
+
+Decided that the process of propagating conditions is simpler than it
+seems at first; 'if-then-else' expressions just specify a simple tree-structure
+for choosing among alternative unconditional expressions, which induces
+a natural way to transform general terms in the syntax into trees of
+unconditional terms.  In turn, the structure of the tree specifies the
+transition alternatives that may occur in the state transition specified
+by a 'step'.
+
+Also moved the ANAST and INAST intermediate representations out into
+their own modules, so that we don't have to include whole compiler phases
+in later modules.  Made appropriate adjustments to the 'import's in Ian's
+code.
+
+Should also consider, in the future, whether there is any use in
+optimizing branches so as to minimize states, i.e. by flattening a the
+conditional tree into a single tier.
+
+----------------------------------------------------------------------
+-- 2010.02.16
+----------------------------------------------------------------------
+
+Continued implementation of the K-defunctionalizer; the only hitch to this
+has been the handling of conditions which, as discussed above, is straight-
+forward.  Settled on a staged approach, wherein the argument to the
+three basic K operators ('get', 'put', 'return') have all conditionals
+lifted out of their arguments according to the equivalences:
+
+  put x (if b then e else e')  <==>  if b then (put x e) else (put x e')
+
+  return (if b then e else e') <==>  if b then (return e) else (return e')
+
+, with 'get' invariant since it takes no expression argument.
+
+This is an intuitive transformation to make; it respects typing, and
+is implicit in the semantics of the defunctionalization transformation.
+
+We take an aggressive approach where conditionals are also lifted above
+binds in K, using the fact that:
+
+  x >>= (if b then y else z)  <==>  if b then (x >>= y) else (x >>= z)
+
+  (if b then x else y) >>= z  <==>  if b then (x >>= z) else (y >>= z)
+
+, the correctness of which follows from associativity of bind.
+
+The result of the hoist is that all K-actions, which may contain conditionals,
+are transformed into trees of unconditional K-actions, which are in turn
+isomorphic to the transition branches needed to specify the appropriate state
+transitions in FSMLang.
+
+One could protest that this transformation results in binds being duplicated
+at a rate exponential in the number of conditionals occurring in a K-term.
+
+Extensive discussion with both Bill and Jason about the performance/space
+consequences of these tranformations, in terms of the final FPGA realization.
+Summarizing, Jason informs us that complicated guards will in general consume
+a large amount of logic, and so we may want to avoid them; complicated
+guards will certainly be an issue in programs with more than a few conditionals
+in any given K-term.
+
+For now, implemented the simpler transformation described above; this puts
+us in a position for the implementation of the K-defunctionalization rules.
+
+LATER:
+
+Rethought the "simpler" transition; the process of flattening the tree is easy,
+but seems very messy, and writing the code makes me realize just what an
+unreasonably huge tangle of guarded transitions might come out.
+
+As a compromise, the 'KSplit' type has been parameterized, and is used
+not only for splitting off conditionals but als to pass state transductions
+back to the R-defunctionalizer in a tree-form that implies the transition
+structure needed to obtain the necessary state transitions.
+
+Note the particularly simple structure of the K-defunctionalizer; once
+conditionals are floated and split up, producing a state transduction
+only requires a straightforward translation of 'get's and 'put's into
+paired signals and simple expressions.
+
+Note also that the structure of the state transduction presents the opportunity
+fot a very simple and obvious optimization: state actions that cancel
+one another out with no effect can be identified and removed simply by
+examining a keylist.
+
+
+----------------------------------------------------------------------
+-- 2010.02.17
+----------------------------------------------------------------------
+
+Began implementation of the R-defunctionalizer;
+
+Changed the transducer function-type 'TransD' so that it maps whole
+transitions (as opposed to just PC values) to actions on the underlying
+signals;
+
+Set up the familiar environment-state monad that I have been using throughout
+to use in the R-defunctionalizer;
+
+Wrote a straightforward translation of the conditional-tree output by the
+K-defunctionalizer into a corresponding set of transitions;
+
+Note that the function for mapping transitions to their corresponding
+transductions compares PC-pairs for unconditional transitions and
+guard-PC-PC pairs; when we talk about equality of expressions in this context,
+we mean strict syntactic identicality, since we mean to use guards to
+distinguish between transitions with identical initial and terminal states.
+
+LATER:
+
+Implemented all cases of the R-defunctionalizer, except for fix (which
+I am right now too tired to do).  Presently, I am working under the assumption
+that all terms we are defunctionalizing are typed resumption-over-state
+(i.e. ResT StateT).  Though we allow more general kinds of terms through
+the front-end, defunctionalizing, for instance, terms of type R (R a)
+would require abstract interpretation of the AST down to a normal form
+of some kind before resumptions could be resolved into transitions in the FSM.
+While this problem may be soluble, its solution promises to be quite involved,
+and may not even make sense for the sorts of programs we wish to
+defuncitonalize.
+
+----------------------------------------------------------------------
+-- 2010.02.18
+----------------------------------------------------------------------
+
+Finished implementation of the basic defunctionalizer, i.e. everything
+expressly given in the DSLWC paper.
+
+Still need to tie it in to the rest of the front-end and write a simple
+Show-declaration for testing and debugging.
+
+----------------------------------------------------------------------
+-- 2010.02.19
+----------------------------------------------------------------------
+
+Smoothed out the rough edges in yesterday's implementation, including
+some minor debugging and the addition of readable output.
+
+The DSLWC example appears to translate correctly.
+
+The code may be in need of some clean-up at a later point, as there was
+some initial confusion surrounding my own internal conventions regarding
+the use of the program counter values (hence the need for debugging).
+
+The monadic state and binding-environments have been elaborated somewhat
+from their original presentation, in order to make the implementation
+somewhat more flexible and easier to think about.  The new monadic state
+keeps (1) the last used (generated) PC value, (2) a counter for generating new
+PC values; (3) a counter for generating unique labels, i.e. by appending an
+integer from a strictly increasing sequence.  The purpose of the additions is
+that transitions can readily be made to or from labels as well as PC values.
+Environment has been extended to bind to every (tail-) recursive call both
+(1) its formal parameters and (2) the label to which it is associated.
+
+The implementation itself seems straightforward at this point, but makes
+use of a large number of small, syntactic twiddles and on-the-spot
+translations between syntaxes.  These are not too bad so far, but because
+we want the code to be presentable for publication purposes, keep an eye
+out for too many complications, especially as we consider expanding
+the defunctionalization rules.
+
+
+----------------------------------------------------------------------
+-- 2010.02.22
+----------------------------------------------------------------------
+
+Work in and around the parser and type-checker to fill in support for
+reactive resumptions, which was largely stubbed in up until now.
+
+Made changes to Syntax, including a now explicit distinction between
+resumptive 'step' and reactive 'step' (trying to use them interchangeably
+would have resulted in more complication in the typechecker than was worth
+it); currently, the distinction is made concretely as 'step_R' and 'step_Re'
+respectively.  Currently considering the idea of allowing the user to
+apply their own chosen suffix to 'step', according to the string given
+in the monad declarations, i.e. "monad Foo = ResT ..." would legally
+bind "step_Foo" to the resumptive layer.  This, however, can be done
+at a later time.
+
+Discovered a number of awkward quirks (though no bugs, per se) in the parser,
+including the apparent requirement that the arguments to 'ReactT' in a monad
+declaration must be given as no-argument upper-case strings (which can be
+done with 'type' declarations).
+
+Expanded support for data declarations going through the type-checker;
+though some has been built in, it needs to be more thoroughly gone over and
+tested.  In particular, we need to make sure that applications involving
+constructors get transformed into particular kind of applications
+(not the general ones) so that the inliner handles them correctly.
+
+----------------------------------------------------------------------
+-- 2010.02.23
+----------------------------------------------------------------------
+
+Finished work on constructed values; data declarations and non-recursive
+constructors are now supported.  Data declarations cannot yet be parameterized,
+though there is no barrier to doing this if it should become important later.
+
+Constructed values have a concrete syntax similar to function application
+in Haskell, but a late phase of the parser (namely the transition between
+the factored and the unfactored grammars) transforms constructors into a
+distinguished syntactic production.
+
+Removed the "load" primitive that Adam had asked for; discussions confirmed
+that it was no longer needed.
+
+----------------------------------------------------------------------
+-- 2010.02.25
+----------------------------------------------------------------------
+
+Pitched a solution to handling memories at Bill; it is quite similar
+in appearance to the memories hack from last summer, but the formal
+details are much more clearly articulated, and all phrased in terms
+of the existing monadic framework.
+
+Remembered that we need to add bit-fiddling primitives, e.g. shifts, etc.
+
+----------------------------------------------------------------------
+-- 2010.02.26
+----------------------------------------------------------------------
+
+Spent some time trying to resolve some of the floating type variables that
+sometimes occur in the output of the typechecker, specifically with the
+recent addition of reactive resumptions, which require some slight
+elaborations to the rules for resolving monadic types.
+
+In the course of these, discovered several troubling quirks, namely:
+
+(1) the order in which constraints are specified in the type inference
+engine sometimes affects the outcome of unification, e.g giving a
+constraint as (x, y) sometimes results in a different annotation than
+giving (y, x) for the same values of x and y; this clearly shouldn't happen;
+
+(2) I caught at least one ill-typed program slipping through; the offending
+program was:
+
+
+-- BEGIN CODE:
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+monad Re = ReactT Req Rsp K
+
+data Req = Read Int Int | Cont
+
+data Rsp = Msg Int | Ack
+
+
+
+main :: Re ()
+main =
+  ((fix
+    (\k -> \x ->
+
+      step_Re(get G >>= \g -> put G (g + 1) >> return g) >>= \req ->
+      signal (req)  >>= \ack ->
+      if (ack == Ack) then return () else k x
+
+    )) 0) >> return ()
+
+-- END CODE
+
+In particular, the type inferencer reached the incorrect conclusion that
+req :: Int and that req :: Req in a different part of the program.
+
+Blame might rest with (1) the inference or typing for '==', (2) the rules
+for bind, which I am already suspecting of some problems, or (3) overly
+permissive constraints on 'step_Re'.
+
+
+----------------------------------------------------------------------
+-- 2010.03.02
+----------------------------------------------------------------------
+
+Began implementation of the MemT addition to the state monad.
+As currently envisioned, 'MemT' is used alongside 'StateT' in the declaration
+for K, e.g.
+
+  monad K = StateT(Int) G + MemT N (Int) M
+
+where 'N' indicates the size of the memory.  MemT differs from a large number
+of consecutive StateT applications in that it allows a mechanism for choosing
+among its morphisms, e.g.
+
+  ... >>= \i ->
+  get M[i] >>= \v ->
+  put M[i] v
+  ...
+
+although this, really, is the only difference.
+
+Wrote a preliminary spec of the output from the front-end in './fopspec.hs',
+which may serve as the beginnings of a reference document for the front-end
+generally.  At this point, the purpose of the document is mostly to facillitate
+Ian in writing code generation to ETIC.
+
+
+----------------------------------------------------------------------
+-- 2010.03.03
+----------------------------------------------------------------------
+
+Wrote the defunctionalization case for 'signal'.  This is straightforward,
+but required a little bit of consideration.  The difficulty comes from settling
+on conventions for how responses in particular should be handled.  At present
+the rule operates as follows:
+
+  Produce two transitions; the first writes the request data to a generic
+  channel; the second reads from the channel into 'retval'
+
+The generic channel will be disambiguated into separate ports or channels or
+connections at the FSMLang transliteration stage.
+
+Some uncertainty still circulates around what the semantics of a multiple-
+argument request/response would be, i.e. are all arguments sent and then
+all responses received, or do the reads/writes happen one at a time?  For now,
+we use the convention that requests/responses have only a single argument;
+constructors with no arguments correspond to an implicit signal.
+
+Details of the protocols here will be worked out as our next task.
+
+LATER:
+
+At Bill's behest, made inlining an optional pass.  This lead to more
+complications than might have been anticipated, simply because I wanted
+to be able to use the 'PPT' class to provide formatted debugging output,
+and the Haskell typeclass system required adding constructors to 'INProg'
+and 'INFunDec' in order to do this.
+
+The inlining option is set by invoking 'ctc' with a flag "-i" in the first
+argument; any other string will result in no inlining.
+
+Also took an opportunity to clean up the code in 'Test' somewhat; 'ctc'
+now returns the INProg tree-aggregate that results from a successful pass
+of the front-end, so that it can be called instead of resorting to all
+of the blatantly duplicate code in 'Test'.
+
+Whether or not inlining occurs, the front-end will output a pair consisting
+of the declaration for 'main' and a list of all other declared functions.
+(In the case of inlining, the list will be empty.)
+
+Made an attempt to get sort-of formatted output from 'writeAST'; not sure
+if the results represent any real improvement in readability or not.
+
+----------------------------------------------------------------------
+-- 2010.03.05
+----------------------------------------------------------------------
+
+Wrote support for MemT into the parser and type inferencer.  In general,
+an effort has been made to keep (indexed) memory accesses as close as possible
+in representation and behavior to the state morphisms, while still
+keeping memories themselves distinct from the ordinary one-shot states.
+
+See (2010.03.02) for a brief descritpion for the concrete syntax for memories.
+
+The AST represents memory accesses as distinct productions, differing from
+'get' and 'put' only in having an extra index.
+
+The typing rules for 'get' and 'put' in a memory are also straightforward:
+
+
+  monad K MemT N (A) M
+
+
+    Gamma |- i :: Int
+  __________________________
+    Gamma |- get M[i] :: K a
+
+
+    Gamma |- i :: Int     Gamma |- e :: A
+  _________________________________________
+    Gamma |- put M[i] e :: K ()
+
+
+where 'A' is any permissible type.
+
+Testing of the additions has not been extensive, but they are simple and
+so far appear to work.  Moreover, the extra structure appears to be amenable
+to adding other types, e.g. the 'QueueT' layer discussed elsehwere.
+
+----------------------------------------------------------------------
+-- 2010.03.07
+----------------------------------------------------------------------
+
+Tweeks to the parser to admit the syntactic sugar-coating of signal
+declarations, e.g. we can declare signals as:
+
+  signal Q = (Read Int, Msg Int) | (Cont, Ack)
+
+where each pair consists of a request (fst) and a response (snd), and each
+separate pair denotes a (possibly distinct) communication channel.
+
+The above could be expressed using 'data', more or less, as:
+
+  data Req = Read Int | Cont
+
+  data Rsp = Msg Int | Ack
+
+although I think the 'signal' notation makes the associations clearer.
+In either case, there is a straightforward mechanism for working out which
+declarations need to be translated into channels, since these will appear
+as the argument to at least one 'ReactT' application in a 'monad' declaration.
+
+In general, the same syntactic and type conventions apply inside of the 
+'signal' dec as apply in 'data'.
+
+The back-end components will have to work out the details of what kinds of
+channels / ports / connections these correspond with (see 2010.03.03).
+
+Since the extension entails a new production in the grammar (see the case for
+'DataDec' in module 'Syntax'), added a case to the function that creates
+the constructor-type environment in the type checker.  This was straightforward,
+as it only really involves matching against a slightly different pattern.
+Note, however, that type inference does not (at least at this stage) check
+against proper pairing of requests and responses.  Such a change, however,
+should not be extremely difficult if it becomes necessary.
+
+----------------------------------------------------------------------
+-- 2010.03.08
+----------------------------------------------------------------------
+
+Spent most of today settling changes from last night's treatment of signal
+declarations.  Although none of these were conceptually noteworthy,
+a number of subtle implementaiton difficulties appeared and had to be resolved.
+
+In particular, ReactT was assumed to take two arguments throughout the
+front-end, but the addition allows it -- requires it -- to be called with
+one argument, which designates a 'signal' declaration.  This required
+extensive changes to the parser and to the superficial syntax transformations
+specified in module 'Syntax'.  Ultimately decided to keep existing two-argument
+structure for 'ReactT', but to add distinguished 'Req' and 'Rsp' types
+that the parser assigns to 'ReactT' applications by default; the 'Req' and
+'Rsp' types are then filled in according to the specification given in the
+appropriate 'signal' declaration.
+
+Type checker appeared to reject well-typed programs after the changes, but
+the problem was traced to a minor oversight in the new function added
+to fill in 'Req' and 'Rsp' types for 'ReactT' and to a failure to add
+the appropriate clauses to the 'Eq' declaration for 'CTTy', which caused
+'Req' and 'Rsp' types to fail unification of what should have been vacuous
+constraints.
+
+Though the work necessary to resolve these issues was quite time consuming,
+the matter appears to be settled and things are running smoothly again.  All
+working examples are working once more, and the sought-after changes, which
+should greatly expedite the compilation of signals, are now in place.
+
+
+----------------------------------------------------------------------
+-- 2010.03.09
+----------------------------------------------------------------------
+
+A skeleton of the NRL IO module is still failing to go through the type
+checker; in the course of investigating this problem, observed that the
+parser failed to catch an unbalanced parenthesis that could have changed
+the meaning of the program text.
+
+Suspect that 'fix' can never be given a lambda expression with no loop
+variables, e.g.
+
+  fix (\k -> k)
+
+won't work.  Instead, we use:
+
+  (fix (\k -> \nothing -> k ())) ()
+
+in cases where a loop like this is needed; in general, the type checker
+expects fix to have some kind of initial condition, and its tail-call to
+take some kind of argument.  I don't think the work necessary to accomodate
+the first case is worth the trouble.  (Suspect it might even introduce some
+kind of weird logical flaw into the type system if admitted.)
+
+Made a few tweeks to the handling of type annotations for signals;
+signals are always associated to their respective declarations, but are
+split up into separate, abstract 'channels', i.e. the list of requests is
+split up into single reqs, though each remains assocated to its particular
+declaration so that it can be rejoined to its associated rsp, or any other
+reqs if it becomes necessary to do so.
+
+There may be some upcoming problems with deconstructing signal types;
+in particular, the eccentric declaration form I've used for signals
+makes it hard to declare a signal as a state type, which in turn requires
+deconstructing patterns, which may induce alot of inessential work.
+
+Alternatively, though, the inability to assign signals as base types in the
+global state makes sense; moreover, at this point, I see no good reason
+that response types cannot be unwrapped "by assumption", a convention
+that the type checker (for better or worse) is willing to go along with.
+
+e.g.,
+
+  monad K = StateT(Int) G
+
+  monad Re = ReactT Q K
+
+  signal Q = (Read, Msg Int)
+
+  main = signal(Read) >>= \msg -> step_Re(put G (msg + 1))
+
+is permissible because 'msg' is "assumed" into an Int by the type checker.
+(Note that the "assumption" is not explicit; it happens just as a consequence
+of the way that type inference is being performed.)
+
+This is, of course, not quite type-sound, but it is expedient for the
+time being and will save a lot of hassle in the short term.  Care should be
+taken, however, not to build anything on top of these assumptions, as they
+will almost certainly need to be changed once we have the time.
+
+
+----------------------------------------------------------------------
+-- 2010.03.10
+----------------------------------------------------------------------
+
+Discussions earlier this afternoon prompted a short investigation into
+whether the front-end always requires bind (>>=) to be followed by an
+explicit lambda expression.  It turns out that the front-end does not
+enforce any such requirement, and accepts syntactically correct, well-typed
+programs that use binds in the normal way, e.g.
+
+  f = step_R(...) >>= g
+
+  g x = ...
+
+is acceptable so long as g :: a -> M b.
+
+At present, however, the defunctionalizer does make such an assumption.
+In order to remove this restriction, it will be necessary to unhook the
+defunctionalizer from its dependence on inlining, which removed the
+possibility that function application would ever occur.  This won't be
+difficult, but requires that we implement a dfun rule for function application.
+
+
+----------------------------------------------------------------------
+-- 2010.03.11
+----------------------------------------------------------------------
+
+Elaborated the default pass that occurs when inlining is not set.
+Previously, the front-end simply converted between the almost-identical
+grammars; now, recursive calls (tail-calls) occuring within the scope
+of a 'fix' are marked by a distinguished 'fix' production; this should
+ease some troubles downstream for generating both FSMLang and ETIC.
+
+The implementation was straightforward; all working examples still work,
+and I have no reason (other than habitual paranoia) to suspect bugs in the new
+code.
+
+----------------------------------------------------------------------
+-- 2010.03.12
+----------------------------------------------------------------------
+
+Worked to complete the front-end's treatment of constructed (read: aggregate)
+data types.  In particular, completed the type checker's treatment of
+constructor patterns appearing in 'case' statements.
+
+Although this may appear to be a small change, it will greatly facillitate
+the remodeling of Jason's code, as simple 'data' declarations can be used
+to encompass the 'structs' appearing in the original C source.
+
+In particular, the front-end now properly types variables occuring in the
+scope of pattern match, e.g.
+
+  case x of
+    (Con a b c) -> ...
+
+so that 'a', 'b', and 'c' above can be treated as accesses to the record
+instantiated by 'x'.
+
+----------------------------------------------------------------------
+-- 2010.03.15
+----------------------------------------------------------------------
+
+Discovered a fault in the program transformation being used
+to defunctionalize conditional expressions.  The incorrect rule is:
+
+  x >>= (if b then y else z)  <==>  (if b then x >>= y) else (x >>= z)
+
+, which is incorrect because the return parameter from 'x' may occur in 'b'.
+
+Working through a corrected transformation suggests that the K-defunctionalizer
+should simply output a modified tree-structure in which expressions may occur
+as internal nodes of the tree; in the earlier structure, they had only appeared
+at the leaves, with nodes in between deciding control flow.  This structure,
+however is easily genereralized.
+
+Binding of conditionals in 'K' thus works in a way similar to binding
+in 'R'.  As a convention, we will treat the guarding expression
+in an 'if-then-else' on the RHS of a bind as a return, i.e. the (pure)
+expression will be evaluated, and its value put into 'retval'.
+
+
+----------------------------------------------------------------------
+-- 2010.03.16
+----------------------------------------------------------------------
+
+At the behest of Bill and the rest of the group, wrote a simple syntactic
+transformation that unfolds nested patterns within a case statement into
+an equivalent sequence of nested case statements.  The method for doing
+this is straightforward (though slightly eccentric -- I coded in haste);
+basically, each compound pattern is replaced by a "simplified" pattern
+consisting only of a constructor applied only to one of:
+
+  simple_pat ::= literal | variable | wildcard
+
+Every nested pattern is replaced by a fresh variable, and becomes the
+sole pattern-alternative of a new case statement; this new case statement,
+in turn, is simplified, until no nested patterns remain.
+
+The transformation is currently optional, and is invoked by giving "-u"
+as the option when invoking the front-end.
+
+
+----------------------------------------------------------------------
+-- 2010.03.17
+----------------------------------------------------------------------
+
+Partially implemented a corrected transformation for handling conditionals
+in the defunctionalizer; this transformation is identical to the first,
+except that it does not propagate conditionals through binds.  Instead,
+conditional expressions within a K-action ('get', 'put', or 'return)
+are defunctionalized into a tree of transitions with unique entry and exit
+states, so that alternative state transductions may occur while affecting
+only local control flow.
+
+The transformations are not quite complete, however, after a discovery
+that the transformation of INAST terms into the specialized data structure
+used as an intermediate representation of the FSM are not quite being
+translated correctly.  In particular, binds are not being "chained"
+as originally intended.  This will be easily fixed.
+
+Importantly, however, the incorrect transformation has been removed.
+The DSLWC example still compiles.
+
+Note, however, that changes made in the course of implemented the corrected
+transformation result in a profusion of empty transitions; these will be
+condensed by a simple optimizing pass.
+
+LATER:
+
+Finished corrections mentioned above; these required a simple syntactic
+transformation on K-terms passed to 'dfunk' in which all binds are associated
+to the right; the transformation is performed as part of the
+K-defunctionalization, but could easily occur elsewhere.
+
+(This is nothing special; I am simply putting the monad laws to good use.)
+
+The defunctionalizer should now handle conditionals correctly, since
+the earlier, flawed transformation has been completely replaced.
+
+Note, however, that the intermediate data structure used in 'dfunk'
+to produce a "shadow" of the transitions necessary to achieve the
+specified state assignments, which may possibly be conditional, subtly
+introduces the possibility for state assignments that don't cancel.
+Should consult with Bill regarding this.
+
+Should also note that the aforementioned structures represent another
+opportunity for optimization by combining disjoint signal mutations into 
+a single FSM state.
+
+
+----------------------------------------------------------------------
+-- 2010.03.18
+----------------------------------------------------------------------
+
+RIP Jason Funk
+
+Tweeked out a few minor bugs in the type checker while I passed the time.
+Patterns with general constructors are going through the front-end now.
+
+Working out defunctionalization of 'case' statements; suggest "lifting"
+these in the same fashion as 'if-then-else' and using the existing
+'SplitNode' structure to produce the case-alternatives.
+
+
+----------------------------------------------------------------------
+-- 2010.03.19
+----------------------------------------------------------------------
+
+Wrote some simple syntactic transformations into 'dfunk', which serve
+to propagate 'case' expressions upward in the same way that 'if-then-else'
+expressions are hoisted (see 2010.02.16 and 2010.03.15 for an important
+revision).
+
+Though the two transformations are similar, they are broken out as distinct
+functions; the purpose of this is to create a term with a simple
+hierarchical structure, as:
+
+  kterm ::= k_case >>= kterm   |   k_case >> k_term
+  kcase ::= case var of (pat -> k_case) (pat -> k_case)*  |  k_ite
+  k_ite ::= if b then k_ite else k_ite   |   k_act
+  k_act ::= get stel  |  put stel expr  |  return expr
+
+This will allow for relatively straightforward transformation of the
+state-actions into a transition structure necessary to reflect any
+control flow necessary to produce the specified conditional behaviors.
+
+The object of these elaborations of the K-defunctionalization transform
+remains the same: to accomodate conditional expressions inside of K-actions
+by embedding "little trees" inside of an FSM with no non-local jumps.
+
+Next course of action is to complete the implementation of 'case' expression
+defunctionalization.
+
+
+----------------------------------------------------------------------
+-- 2010.03.21
+----------------------------------------------------------------------
+
+Things that need to be done in the immediate future:
+
+  + finish handling of aggregate values (i.e. 'data' things)
+    [POSTPONED 2010.03.27]
+
+  + write a simple transformation pass that doles out unique
+    identifiers so as to preserve lexical scoping behavior;
+    [DONE 2010.03.30]
+
+  + write an initialization pass into the defunctionalizer to collect
+    lambda-bound variables (including those in 'case' expressions) into
+    'SIGNAL' declarations;
+    [DONE 2010.03.27]
+
+
+----------------------------------------------------------------------
+-- 2010.03.24
+----------------------------------------------------------------------
+
+Currently putting compilation of 'case' statements and aggregate values
+on the back-burner; the solutions worked out for these appear to be
+conceptually correct, but I am concerned that the coding will be too
+time consuming and complex to finish and still allow sufficient time to
+ensure that the NRL IO module example is fully operational.
+
+Adam directed my attention to a bug in the pattern-unnester (module CT.Uncase);
+examination of the code reveals at least one error in the procedure,
+and the output suggests that case alternative are being improperly rearranged
+in some instances.
+
+In particular, when expanding a case expression from a nested pattern,
+the procedure should do something like transform this:
+
+
+  case x of
+    (pat1, v) -> e1
+    pat2      -> e2
+    pat3      -> e3
+
+to:
+
+  case x of
+    (u, v) -> case u of
+                pat1 -> e1
+                _    -> case x of
+                          pat2 -> e2
+                          pat3 -> e3
+    pat2      -> e2
+    pat3      -> e3
+
+which is quite ungainly, but which does produce the desired property.
+Currently, the pattern unnester pushes all remaining alternatives forward
+and incorporates them after 'pat1' in the above which, of course,
+is not correct.
+
+----------------------------------------------------------------------
+-- 2010.03.25
+----------------------------------------------------------------------
+
+Fixed the pattern unnester; the problem was that several different
+parts of the code were implementing the wrong transformation.  The logic
+errors themselves were somewhat intricate but not interesting enough to
+merit discussion.  However, it should be noted that the fixes were somewhat
+hurried and off-the-cuff, and may need to be re-fixed later.  In particular,
+there was one strange issue that resulted in the case alternatives being
+ordered in such a way that the last element of the list kept being
+moved to the head, with all other elements remaining.  Worked around this
+with a quick post hoc list op at the last stage of the transformation.
+
+Continued work on the back-end.
+
+Implemented a bit-slicing primitive as a ternary primitive operation.
+Added a production for ternary primitive operations, although bit slicing
+is currently the only such primitive.  Current (unofficial) syntax is:
+
+  slice n p1 p2
+
+where n is an integer, p1 is the left-most bit position, and p2 is the
+right-most bit position.  This is for compatibility with FSMLang, which
+does not have bit-shifting primitive as in C, but does have bit slicing and
+bit concatenation.  May need to discuss this with Bill, as we probably want
+some safeguards in place to ensure that bit slices always stay in an
+appropriate range.  Suggest keeping 'p1' and 'p2' as constants, and checking
+things using a simple dependent type scheme if necessary.
+
+For now, we use the convention of indexing the bits in ascending, left-to-right
+order.
+
+Added a bit-wise concatenation primitive also.  This is just another
+binary primitive.  Used together with slice, the shift-mask operations
+used in typical low-level C (as in the NRL back-end) should be possible.
+
+Observed that there seems to be some problem in the defunctionalizer-chain
+rooted somewhere in idioms such as:
+
+  slice x n1 (_CONST1 - _CONST2)
+
+where _CONST is a symbolic constant defined elsewhere.  The type-checker
+in particular complains exclusively in the instance that the arithmetic
+expressions incorporates symbolic constants.  Currently working around
+this issue, as it does not seem extremely urgent.
+
+Actually, it appears to be that there is some general difficulty with
+symbolic constants.  Will work this out later if it becomes necessary.
+
+
+----------------------------------------------------------------------
+-- 2010.03.26
+----------------------------------------------------------------------
+
+Continued work on the initialization passes for the defunctionalizer,
+i.e. gathering and discriminating state components that need to be
+translated into FSM declarations.
+
+Some reflection suggests that we should stipulate that 'main' must
+always be a fully applied, closed term, since the meaning of a main
+function that takes parameters is, in the context of the defunctionalizer,
+unclear.
+
+Also wonder whether there is some simple garbage collection algorithm
+we could apply as part of an abstract interpretation phase in order to
+pare down the signal space somewhat.
+
+----------------------------------------------------------------------
+-- 2010.03.27
+----------------------------------------------------------------------
+
+Wrote a simple pass into the defunctionalizer to collect lambda-bound
+variables into signal declarations.  Conversion between the CT and the
+FSMLang type schemes is currently stubbed as a trivial translation;
+will be handled in the near future.
+
+Wrote a pass ('CT.ScopeVars') front-end pass that performs alpha-conversion
+on the program to ensure that all variables have unique names that reflect
+the scoping rules of the lambda calculus.  This is a straightforward
+transformation that simply associates a counter to each variable
+in the program, incrementing that counter each time a new scope involving
+that variable is entered, and crawling the syntax tree in an environment
+where that variable is bound to its corresponding scope-number.  Concisely,
+scopes are enumerated, and the numerals used to disambiguate occurences
+of variables.  Declared functions are treated as new scopes, and their
+declared parameters treated identically to the formal parameters of a lambda.
+The same rule will also be applied to pattern variables in case alternatives,
+but the implementation is currently stubbed since the handling of 'case'
+expressions is currently in flux.
+
+The alpha conversion is necessary for the defunctionalizer, where all
+lambda-bound variables must become global variables, but may also be useful
+to the other compilation paths.
+
+There will be some annoying difficulties in working the transformation
+into the defunctionalizer's compilation path, due to the types of the functions
+sitting between the type checker and the defunctionalizer.  It should not
+be terribly difficult to work out, but a little thought will probably
+produce a neater solution.
+
+
+----------------------------------------------------------------------
+-- 2010.03.29
+----------------------------------------------------------------------
+
+Implemented the changes Bill had requested to the abstract syntax, i.e.
+getting rid of the ambiguous list argument to the 'CTFixIN' constructor
+in INAST.  Changed 'CTFixIN' to take only a single expression argument,
+and moved the list to a distinguished application production, 'CTFixAppIN'
+which represents a loop-function fully applied to its initial parameter
+assignments.  This entailed some minor changes down the line in every
+other module that uses INAST, but no major restructuring.  It should
+be noted, however, that the R-defunctionalizer still does not have a
+concept of 'loop' that is abstract enough to easily admit defuncitonalization
+of "floating fixes", i.e. unapplied fixpoint functions.  This, however,
+is merely a coding difficulty.  As long as we continue with the
+(admittedly temporary) assumption that defuncitonalization is applied
+to a fully inlined program, the question of floating fixes is a non-issue.
+
+This change, and the associated tweeks should allow the application of the
+simple 'toinast' transformation to the output of the typechecker, which should
+in turn allow for the 'scopevars' transformation (2010.03.27) to be applied
+before inlining, as it needs to be.
+
+I should stress, again, that the order in which transformations are being
+applied is getting a little ad hoc and messy, and should be cleaned up.
+
+Presently, we should go through the following sequence for all compilations:
+
+  toinprog -> noinline -> scopevars
+
+The first transformation ('toinprog') changes to the slightly elaborated
+AST representation; the second transformation tags all tail-calls in
+the AST so that they do not interfere with inlining and are clearly
+distinguishable by later passes; the third transformation ensures that
+variables have unique identifiers to reflect the appropriate scoping
+behavior, which is necessary for the defunctionalizer in particular,
+and should not negatively affect other compilation phases.
+
+At present, THIS ORDERING MUST BE USED.
+
+----------------------------------------------------------------------
+-- 2010.03.30
+----------------------------------------------------------------------
+
+More work on the remodel of the IO module;
+
+Some debugging of the defunctionalizer has been necessary.  Although several
+bugs involving the formation of exit transitions from loops, conditionals,
+and combinations thereof have been found a fixed, at least one
+difficult-to-reproduce bug remains; it occurs only in
+'~/CT-1.0/TestPrograms/backend.ct.hs', and the exact source of the bug
+has not been discovered.
+
+
+----------------------------------------------------------------------
+-- 2010.03.31
+----------------------------------------------------------------------
+
+Further investigation of "difficult-to-reproduce bug" mentioned above reveals
+that, in fact, the bug was not a bug at all, but an artifact of a  correct
+compilation of a source text that I had incorrectly written.  As such, it
+appears that the loop and conditional exit transitions have been completely
+worked out.
+
+Produced a cleaned-up module for generation of the final concrete-syntax
+output of the defunctionalizer; also began to work out some simple
+optimizations of the FSM.
+
+
+----------------------------------------------------------------------
+-- 2010.04.01
+----------------------------------------------------------------------
+
+Located and fixed a few reversed assignments in the defunctionalizer,
+and corrected the concrete syntax output for channels.
+
+Noticed what appears to be a bug in the type-checker while working
+on the PEIP interface remodel; it appears that the type of reactive 'signal'
+isn't being handled correctly.  Specifically, this:
+
+    if (n == 1)
+    then
+      signal Rd_Cmd_Header_In1
+    else
+      return ()
+
+typechecks, while this:
+
+    if (n == 1)
+    then
+      signal Rd_Cmd_Header_In1
+    else
+      signal Rd_Cmd_Header_In1
+
+does not, which is the opposite of what should happen.
+
+Also observed that rewriting the second as:
+
+  (
+
+    if (n == 1)
+    then
+      signal Rd_Cmd_Header_In1 >>= \cmd_hd -> return cmd_head
+    else
+      signal Rd_Cmd_Header_In2 >>= \cmd_head -> return cmd_head
+
+  ) >>
+
+placates the type-checker, which may give some clue as the problem.
+
+Use of the fortuitous bug in the type-checker's handling of signal types
+is starting to complicate things; it appears that, in order to continue
+using it in 'if-then-else', the base type must be 'Bool', and the
+return value itself must appear alone.
+
+----------------------------------------------------------------------
+-- 2010.04.03
+----------------------------------------------------------------------
+
+To do before the demo to Stan:
+
+  + Finish the IO module mock-up;
+  + Correct output of types in the signal declarations;
+
+At this time, that appears to be all.
+
+----------------------------------------------------------------------
+-- 2010.04.04
+----------------------------------------------------------------------
+
+Observed a problem with the handling of nullary function references
+somewhere in the defunctionalizer compilation path; function identifiers appear
+to be falling through the inliner when they should not.  This happened
+when attempting to compile the following:
+
+  advance_dma_transfers =
+    advance_fe_to_be_queue >>
+    advance_be_to_fe_queue >>
+    return ()
+
+Attempting to rewrite so that the applications had dummy arguments did not
+resolve the problem.  Add this to the bug list.
+
+
+----------------------------------------------------------------------
+-- 2010.04.05
+----------------------------------------------------------------------
+
+Further cleaned up output of declarations, including a tweek so that
+the use of boolean variables to head 'if-then-else' in the source comes out
+to a correct guard in FSMLang.  Handling of variables is still very special-case
+and ad hoc, making assumptions about general data widths.  This is leaves
+much room for improvement in the future, perhaps involving some more
+sophisticated devices such as nonce types.
+
+Wrote a very simple optimization which simply collapses chains of unconditional
+transitions that have no assignments.  This, unfortunately, does not have
+as great an effect on FSM size as I had hoped, and moreover puts the transitions
+in a difficult-to-read order in the final output.  The next natural step
+would be to include unconditional transitions with assignments, although this
+will require slightly more analysis and some extra coding to handle the changes
+to the tranducer function.
+
+The stubbed NRL back-end goes through the defunctionalizer, but takes a very
+long time (2 - 5 minutes) to do so.
+
+Now allow for toggling between optimize or no-optimize when defunctionalizing,
+though the structure of the code, as in the front-end, is still primtive.
+
+Defunctionalizer now dumps its output to the terminal and writes to a
+temporary file called "out.des".
+
+----------------------------------------------------------------------
+-- 2010.04.12
+----------------------------------------------------------------------
+
+Currently on sabaatical.
+
+At Adam's request, allowed type annotations to propagate through the
+"stretched-out" case statements produced by the pattern unnester.  Accomplished
+this by adding type annotations to the producitons of 'CTPat' so that
+the necessary type information is on hand at the type that the pattern un-nest
+transformation is performed.  This was straightforward, but tedious to do.
+At this time, testing will have to depend upon feedback from the rest
+of the team.
+
+Damn my "can-do" attitude.
+
+
+----------------------------------------------------------------------
+-- 2010.04.22
+----------------------------------------------------------------------
+
+Knocked out a few minor bugs in the parser and type-checker in the course of
+cleaning up a coding of the old garbage collection code from the PEPM'10 paper.
+
+Note in particular that lists are not yet fully handled, nor are general
+constructed types, and this creates some problems.  These are issues that
+can be dealt with, and that I intend to deal with eventually; however,
+other matters are demanding attention.
+
+
+----------------------------------------------------------------------
+-- 2010.04.28
+----------------------------------------------------------------------
+
+Beginning to tie up some of the loose ends left over from the initial
+development push, especially as present in the parser and typechecker.
+
+Began work to handle recursive types in the front-end; only minor
+changes to the parser and type checker have been needed.  Specifically,
+discovered a bug in the parser that caused declarations of the form:
+
+
+  data C1 = ...
+
+  data C2 = ...
+
+  data D = C C1 C2 C3
+
+to parse incorrectly, as "C (C1 (C2 C3))", i.e. as declaration of a
+constructor 'C' with arity 1, and an argument constructed from C1, C2, and C3,
+rather than as a constructor with arity 3 and three separate arguments.
+
+Fixing this bug allows for the use of recursively typed structures, e.g.
+terms in a simple grammar, as the one used in the garabage collection
+examples.
+
+----------------------------------------------------------------------
+-- 2010.04.29
+----------------------------------------------------------------------
+
+Continued improvement of the front-end, using the garbage collection code
+as a benchmark;
+
+Noted, once again, parse errors in type signatures; these have been
+persistently problematic, but it has so far not been important enough
+to compel any substantive work.
+
+Filled in some missing cases in the alpha-conversion performed by 'ScopeVars';
+the caused identifiers in 'case'-expressions and constructor applications to
+be skipped over.  Problem was easily resolved.  May need to consider extending
+the alpha conversion to be applied also to identifiers in patterns; at
+present, pattern variables (although they represent meaningful bindings)
+are not transformed.
+
+
+----------------------------------------------------------------------
+-- 2010.04.30
+----------------------------------------------------------------------
+
+Further clean-up and completion of the front-end;
+
+Improved preprocessing phase of the typechecker so that type synonyms
+may appear in other type synonyms, and in data declarations.  Type synonyms
+should now be correctly substituted in data and monad declarations as well;
+this means both that type inference should correctly recognize synonyms,
+and that the program representation produced by the type inferencer should
+be annotated with non-synonym types.
+
+Discovered a parser bug that necessitates constructed types to be explicitly
+associated to their arguments with parentheses, e.g.
+
+  a -> C b
+
+will not parse correctly, though
+
+  a -> (C b)
+
+will parse correctly.
+
+Note that most of the additions to the typechecker's initialization pass
+are coded redundanty, i.e. reuse a lot of the same operations, and could
+probably be cleaned up later.
+
+
+----------------------------------------------------------------------
+-- 2010.05.06
+----------------------------------------------------------------------
+
+Discovered a fix an insidious bug in the typechecker that was causing
+strange unification attempts.  This stemmed from the use of the same string
+in the type variables for polymorphic built-ins.  In such instances,
+a mixture of polymorphic built-ins (e.g. the use of both '==' and ':')
+in the same program resulted in an attempt to unify possibly different
+types when the type variables were substituted.
+
+Changed type variable strings in 'PrimitiveTySigs' so as to ensure that
+no string is used twice unless the types it stands in for are constrained
+so as to be identical.  This appears to have fixed the problem.
+
+Continue to find small quirks of the parser that, while not quite incorrect,
+point to some ill-specified grammar in some of the recent syntactic additions,
+e.g. as in the parser 'sigd' for signal declarations.  Work these out
+as they arise, but the corrections tend to be idiosyncratic in and of
+themselves.
+
+
+----------------------------------------------------------------------
+-- 2010.05.07
+----------------------------------------------------------------------
+
+Generalized yesterday's solution to the polymorphic primitive op problem;
+merely changing the identifiers in the built-in type signatures is not
+sufficient to ensure that two different instances of the same primitive
+op may not cause a unification problem, e.g. as in "(1 == 1) && (True == False)"which would cause a unification error if only the built-in type signatures
+were changed.
+
+Added an action to the type inference cases for primitive ops which
+(1) replaces all generic type variables from the primitive type signatures
+with unique type variables and (2) produces a set of additional constraints
+based upon which variables in the built-in type signature are equal.
+
+e.g.
+
+  "f :: a -> a -> b"
+
+produces a constraint as:
+
+  "(TY a1, TY a2)"
+
+which will ensure that both the arguments have the same type.
+
+Also improved handling of reactive signals, though the current arrangement
+is rather cumbersome.  Added a case to the unifier so that any 'Req' unifies
+with any other 'Req' so long as they are part of the same signal declaration;
+similarly for 'Rsp's.  Added another initialization pass before type inference
+so declared monads may appear as arguments to constructors data decs, i.e.
+so that 'CTCon' is replaced with the appropriately declared monad.
+
+Also discovered that, due to a logic error, constructor arguments were
+being associated to their respectively decared types in reverse order,
+which lead to many of the type errors stemming from the use of constructed
+values.  The erroneous code probably represents an attempt to handle
+(or at least allow) partial application of constructors, which is unnecessary
+at this point.  Rewrote the suspect code in a simpler way that does not
+handle partial constructor application but does now correctly constrain the
+types of the arguments of a constructor.
+
+----------------------------------------------------------------------
+-- 2010.05.08
+----------------------------------------------------------------------
+
+Continue to encounter problems in correctly handling the types of reactive
+'Req's and 'Rsp's; this seems to stem from the already awkward strategy
+of forcing 'Req' and 'Rsp' to be associated under a 'signal' declaration.
+This design choice currently prevents us from directly referencing 'Rsp'
+or 'Req' in type signatures, and often leads to spurious type errors
+as a result.
+
+The problem, however, can presently be circumvented simply by omitting the
+type signature; in its absence, functions appear to type correctly, albeit
+with hanging type variables.
+
+Also observed that the inclusion of a type signature with no accompanying
+definition causes an error from the typechecker.  This probably should
+cause an error, but raises the question of how to use this fact later
+for a useful static check.
+
+Observed that alternatives in 'case' expressions are being strangely
+reordered some, but not all, of the time.  Currently working to trace
+the source of this problem.
+
+
+----------------------------------------------------------------------
+-- 2010.05.10
+----------------------------------------------------------------------
+
+Discovered the source of the out-of-order alternatives in case expressions;
+this was the result of a minor coding error that, coincidentally, appeared
+in both TypeChecker and Inliner; correcting the error appears to have
+resolved the problem.
+
+Also discovered that the same problem that was leading to incorrect type
+constraint formation in constructor applications in expressions was leading
+to similar problems in typing constructor patterns.  A similar coding solution
+fixed this problem as well; it precludes partial application, but partial
+application shouldn't happen in patterns.
+ 
+----------------------------------------------------------------------
+-- 2010.05.14
+----------------------------------------------------------------------
+
+Added another distinguished pattern to 'CTPat' to allow for deconstruction
+of reactive resumptions, along the same lines as what was done for
+ordinary resumptions; concrete syntax is exactly the same as our usual
+conventions, i.e.  "P(sig, rest)" and "D v".
+
+Extension to the front-end was easy, though it still suffers from the
+existing ambiguities of request-response signals.  These are currently
+stubbed into the patterns as unique type variables that may never be
+resolved to anything further than variables in most cases.
+
+Caught the parser missing an imbalanced parenthesis, in the context of a
+fixpoint-application.  This is a minor issue; will watch for it, and fix
+it when it becomes convenient.
+
+Also observed that 'ScopeVars' is missing alpha conversion for variables in
+case alternatives; this needs to be added at some point soon.
+
+Observed that the type-checker seems to implicitly rule out the possiblity
+of lists of lists; may need to look into this later if they persist in
+being used.
+
+
+----------------------------------------------------------------------
+-- 2010.05.19
+----------------------------------------------------------------------
+
+Added alpha conversion of variables in the patterns of 'case' expressions;
+this was straightforward.
+
+Observed that the transformation in 'Uncase' diverges in the case of the
+CT version of the PEPM'10 garbage collection example,
+i.e. '../TestPrograms/gc.ct'.  This is not an expected behavior, and clearly
+represents a bug.  Currently under investigation.
+
+LATER:
+
+Traced the divergent behavior of 'Uncase'; this was simply a case of
+bad programming practice coming back to bite me, as the new 'PPauseRe' and
+'PDoneRe' patterns were not accounted-for in the module, which lead to
+an unanticipated loop through the default cases of the interpreter.
+
+
+----------------------------------------------------------------------
+-- 2010.05.20
+----------------------------------------------------------------------
+
+Took over work on the CT-to-ETIC code generation module, as of today.
+
+There are numerous, obvious stubs in the current module, and bugs are
+already being observed.
+
+In particular:
+
+  + assignments that never happen
+  + immutable variables being mutated
+  + assignments from unspecified "dummy" sources
+
+More on these as work progresses.
+
+
+----------------------------------------------------------------------
+-- 2010.05.21
+----------------------------------------------------------------------
+
+Continue work to untangle loops in ETIC; these may end up working better
+than expected, but there is some ambiguity surrounding their proper semantics.
+
+Preliminary addition of a 'break' statement to ETIC, provided breaks remain
+necessary, as well as a C-like "void" type to replace "untranslateable unit"
+since, in general, references to unit entail no meaningful data.
+
+Caught the type inferencer again allowing an ill-typed program through, namely:
+
+
+  get G >>= \y -> ((fix (\k -> ... ) arg))
+
+Some fixes to code generation of loops; in particular, corrected the
+initialization of loop variables and repaired the problem with mutation
+of immutable variables in the case of fixpoint applications.
+
+Attempted an implementation of procedure calls, which appear to be stubbed.
+Under the new regime, each declared function has a set of rigidly bound
+virtual registers for its arguments and its return value; this results in
+a large number of redundant assignments, but maintains the correct state
+semantics.  Also wrote in nullary function application.
+
+----------------------------------------------------------------------
+-- 2010.05.22
+----------------------------------------------------------------------
+
+Put 'break' statements back at the end of loops.  Still do not see the
+need for this (nor am I even completely convinced of its correctness),
+but Adam insists these are necessary.  May remove them later, or replace
+them with some streamlined mechanism after a closer inspection of the
+ETIC-to-Microblaze code generation phase, which may shed some light on
+the semantics of some of these ambiguous ETIC constructs.
+
+----------------------------------------------------------------------
+-- 2010.05.23
+----------------------------------------------------------------------
+
+Began writing in C-like 'struct' and 'union' in to the ETIC syntax
+and code generator, leaving the old constructs temporarily in place so as
+to avoid errors from the Haskell compiler.  Old 'union' declaration conflates
+'struct' and 'union' and does not appear to be completely implemented.
+Also allow 'struct' and 'union' as types, presuming their declaration.
+
+Working on implementing correct compilation of 'data' declarations.
+
+----------------------------------------------------------------------
+-- 2010.05.24
+----------------------------------------------------------------------
+
+Began work on a straight-forward compilation of data declarations.
+This is done as follows:
+
+(1) Each data declaration produces a C-like 'struct' with two members,
+    the first of which is an 'Int' flag indicating the constructor being
+    applied, and the second of which is the union described in (2);
+
+(2) The body of the data declaration produces a C-like 'union' that may
+    contain any of the structs described in (3);
+
+(3) Each constructor declaration produces its own 'struct' declaration,
+    in which the fields of the 'struct' correspond to the arguments
+    of the constructor.
+
+(4) All of (1), (2), and (3) are generated as ETIC declarations.
+
+Both 'struct' and 'union' have fields with standard, compiler-generated names;
+these will be accessed using extractor functions similar to a C-like '.'
+operator.
+
+Also began work on compiling 'case' expressions; this is done by straight-
+forward comparisons on the standardized fields of the 'struct's and
+'union's generated by the procedure above.  More implementation needs
+to be done, but work seems to be going on the right track, should not take long.
+
+LATER:
+
+Finished an implementation of fully procedural pattern matching on
+constructed values, where patterns may be nested.  This is done by using
+the standardized field-naming conventions of the 'struct' and 'union'
+declarations generated by compiling 'data' declarations to perform simple
+equality tests on the constructor or instance fields of the struct, with
+nested field accesses for nested patterns.
+
+e.g.,
+
+  data Dat = A Int Bool
+           | B Bool Int
+           | C Foo Bool
+
+  data Foo = Foo Int Bool
+
+  ...
+
+  case d of
+    (A n _)         -> n
+    (B _ n)         -> n
+    (C (Foo n _) _) -> n
+
+compiles to:
+
+  if (d.ctor == A)
+    res := (d.instance).field0;
+
+  else if (d.ctor == B)
+    res := (d.instance).field1;
+
+  else if (d.ctor == C && (((d.instance).ctor) == Foo)
+    res := (((d.instance).field0).instance).field0;
+
+
+, taking liberties with the ETIC syntax here for the sake of clarity.
+
+The remaining cases for patterns -- except resumptions, which need further
+discussion -- should follow immediately, as these are just special cases
+of constructor matching.
+are essentially just special case.
+
+----------------------------------------------------------------------
+-- 2010.05.25
+----------------------------------------------------------------------
+
+Some minor fixes to yesterday's work, to keep the field accesses straight.
+
+The code itself is a little messy and idiosyncratic at places, mostly due
+to the clash in programming styles; this could be cleaned up later, but
+is not an urgent matter.
+
+Added support for tuples, treating these as structs with standard 'fst'
+and 'snd' fields.
+
+Fixed the long-standing bug in the type-checker that was preventing resolution
+of monadic functor variables appearing in the types of terms in '>>=' and '>>';
+this was due to a strange combination of a simple typographical error and
+an oversight in the function responsible for applying updated unification
+solutions to the constraint list.
+
+Note that fixing this error may cause some programs that were passing the
+typechecker to now fail; this was the case in 'gc.ct', though it turns out
+that the failure was due to a genuine type error.
+
+
+----------------------------------------------------------------------
+-- 2010.05.26
+----------------------------------------------------------------------
+
+Work to fix procedure calls; these are problematic especially in the case
+of recursive calls, the return registers are being assigned out of order.
+
+Should also note a small but meaningful semantic discrepancy between CT
+and ETIC: if a 'case' expression is executed in which no pattern-alternative
+matches, the implicit semantics of CT suggests the result should be an
+exception, whereas ETIC, as currently compiled, will simply result in a
+'nop' and resume execution at the first statement after the 'case' segment.
+This may need to be changed later; mention to Bill.
+
+Fixed assignments from procedure calls; as with everything else so far,
+these resemble C, and the arrangment of virtual registers should respect
+the semantics of Haskell-style static assignments.
+
+May drop the special 'arg' and 'ret' registers for procedure bindings,
+as it is not clear that these are necessary any longer.
+
+Noted problems with reactive resumptions, as used in 'gc.ct'; in particular,
+these appear (at least syntactically) to entail higher order functions,
+which the ETIC generator does not presently know how to handle.  It may
+be possible to deal with these by inspecting types or patterns, since
+reactive resumptions should present the only instance in which the application
+of unspecified functions occurs.
+
+Suggested list of things to clarify with Bill:
+
+(1) Proper use of thread control blocks, especially as regards (i) resumption
+deconstruction via patterns, (ii) operationalizing the semantics of first-class
+threads in CT at the ETIC level, and (iii) what precisely needs to be in a TCB;
+
+(2) Dealing with higher-order functions in reactive resumptions, as above;
+
+(3) Resolution of ambiguities surrounding the use of lists, and development
+of a syntax that does not leave this ambiguity open;
+
+(4) What to do with strings;
+
+(5) Compiling reactive 'signal', which is a big mess right now;
+
+
+Also need to work out some consistent implementaiton and semantics of
+constructor applications, though this is not a large conceptual problem.
+Presently, construtor application looks like normal procedure application.
+
+
+----------------------------------------------------------------------
+-- 2010.05.31
+----------------------------------------------------------------------
+
+Small changes to the back-end of the parser and the expression
+pretty-printer, for use with Bill's lambda-to-monad reifier.
+
+This revealed a case that 'Factored' had not anticipated, namely,
+the application of a constructor (or any other function) to a
+bind-constructed monadic term.  This is a minor issue, but indication
+there may be other cases not anticipated at the time.
+
+
+----------------------------------------------------------------------
+-- 2010.06.01
+----------------------------------------------------------------------
+
+Began implementation of a straightforward interpreter for ETIC.
+This has highlighted a number of issues in the ETIC syntax that are
+not necessarily incorrect, but somewhat awkward.  One of these is
+the distinction between expressions and statements; this seems to
+mostly follow C -- which is what I am assuming for the present
+purpose --  but the semantics is not actually documented anywhere.
+Have also opted to treat execution inside of 'Loop' as falling through
+in the absence of an explicit jump; the use of 'Break' creates
+significant difficulties for the ETIC interpreter, and never really
+seemed necessary to me.
+
+----------------------------------------------------------------------
+-- 2010.06.03
+----------------------------------------------------------------------
+
+Continued work on the interpreter, which continues to call attention to
+some semantic ambiguity; certainly, it would appear that ETIC programs
+admit a much wider degree of expressiveness than CT.
+
+Built support for signal declarations into the ETIC generator.  Signals
+are simply translated into 'data' declarations, since the two are effectively
+the same for the purposes of this compilation path.
+
+The programs produced by the reifier (invoked from '../Test.hs' as 'ct_reify')
+seem to be the current benchmark for the compiler. However, three significant
+issues still must be dealt with before complete ETIC programs can be produced
+and tested.  These are:
+
+  +  Resolution of the list issue; the consensus seems to be that these
+     will be replaced by stateful queues, stacks, etc.
+
+  +  Correct compilation of the 'higher order' functions coming out of
+     the patterns used to deconstruct reactive resumptions; these seem
+     to corresond simply to jumps back to the calling thread, with the response
+     deposited in the appropriate register;
+
+  +  Full specification of reactive 'signal', which will entail the presumption
+     of a 'handler' function every time 'Re' is used;
+
+Hope I can get these slammed out by the end of next week!
+
+
+----------------------------------------------------------------------
+-- 2010.06.04
+----------------------------------------------------------------------
+
+Realized that the list above (2010.06.05) also requires some direct
+handling of the list issue, and so built 'StackT' into the front-end,
+with CT-primitive actions of 'push' and 'pop'.  As with 'MemT', these
+are treated as slightly elaborated versions of 'get' and 'put', and
+the convention is used that:
+
+  pop :: Stack a
+
+  push :: a -> Stack ()
+
+whenever 'K' is declared with a 'StackT' layer.  Syntax is completely
+analogous to that for 'MemT', as described elsewhere.
+
+Also added stack primitives to ETIC; this may be only temporary, as an
+expedient to deal get the reifier examples working ASAP.  The code generator
+currently translates stack operations in CT directly into isomorphic
+stack operations in ETIC, though there is no conceptual difficulty in
+using the existing array constructs to implement stacks.
+
+Implemented pseudo-"higher-order" functions for reactive resumptions;
+this is accomplished by inspecting the type of an application in the code
+generator, and making assignments accordingly.
+
+Discussions with Bill have settled upon keeping stacks in ETIC, and
+making at least provisional assumptions about their mutability.  In particular,
+lists will be translated into stacks (at least for now), under the stipulation
+that they never appear in a context requiring their immutability, i.e.
+as a lambda-bound variable.  This is important because stacks are mutable,
+and it is not acceptable to keep multiple copies of a stack in order to
+preserve this semantics.
+
+Fixed a minor bug in the type-checker that was failing to properly type
+list-cons (:), due to an oversight in the functions for dealing with
+polymorphism in the primitives.  This may require revisiting later.
+
+----------------------------------------------------------------------
+-- 2010.06.29
+----------------------------------------------------------------------
+
+Discussions surrounding the intermediate representation one step down
+from CT (see './OESS/oess.log.txt') suggest the need to revise the usages
+of 'fix' so as to enforce desired constraints on tail recursion.
+
+Hence, the following to-do list for the front-end:
+
+  + Replace 'fix' in 'R' with 'tailfix' (see revisions to MonadicConstructions)
+  + Re-type general 'fix' so that it occurs strictly in 'Re'
+  + If necessary, add a static syntactic check to enforce recursion constraints
+
+
+----------------------------------------------------------------------
+-- 2010.07.01
+----------------------------------------------------------------------
+
+Added tokens 'loop_R' and 'loop_Re' to the parser, and a simple loop construct
+(the semantics of which is defined in MonadicConstructions and in
+ './OESS/oess.log.txt') to the syntax and type checker.
+
+In light of recent discussions with Bill, considering removing 'fix' completely,
+as its syntax implies the wrong semantics and would require a counterintuitive
+syntactic check for correct implementation.
+
+----------------------------------------------------------------------
+-- 2010.07.02
+----------------------------------------------------------------------
+
+Fixed 'ScopeVars' so that variables in loops are not scoped out, allowing
+them to be set before entry into the loop.  This is especially important
+to preserving the correct semantics for variables in loops, and in making
+the implementation workable.  In general, any lambda-bound variable
+appearing before the entry point to a loop should remain bound in that loop
+until being overridden by another binding.  This allows the LBVs to be used
+as ordinary loop variables, without violating the lambda semantics.
+
+Wrote this into 'ScopeVars' using a bit of a hack, where the string
+"loop_R" is set in the environment according to whether the interpreter is
+currently traversing the body of a loop.
+
+Caught the parser permitting unbalanced parentheses again.
+
+After discussions with Bill, redefined semantics of 'loop_R' as:
+
+
+  data Z a = Continue a | Break a
+
+  break :: (Monad m) => a -> ResT m (Z a)
+  break v = return (Break v)
+
+  loop_R r = r >>= \v -> case v of
+                           (Break v)    -> return v
+                           (Continue v) -> loop_R r
+
+
+This adds a loop parameter, which was necessary after it turned out that
+the semantics I was using for the lambda-parmeter bindings conflicted with
+the monad laws.
+
+Note that loop as defined thus only one parameter, but could easily be
+extended to accommodate any number; this is the assumption the front-end
+will make, e.g. that loop is applied to a lambda as:
+
+  loop_R (\x -> \y -> E{x,y})
+
+Note also that this is essentially 'fix', but without that damn recursive call.
+
+
+----------------------------------------------------------------------
+-- 2010.07.07
+----------------------------------------------------------------------
+
+Discovered an issue with typing of the cartesian projections; this is
+somewhat problematic, because having them as primitives has proven
+quite useful.  Discovered and fixed a logical bug (oversight) in the 
+type inferencer, but this resolved only some of the problematic cases.
+
+Current type inference problem lies in the use of tuples as in 'TwistKernel',
+though the exact origin of the bug remains unknown.
+
+LATER:
+
+Fixed aforementioned bug; this required some small tweeks to the way function
+applications are handled, and was partially an artifact of the typechecker's
+effort to unify what was, in fact, an ill-typed program.
+
+Added special inference cases for 'fst' and 'snd', which at this point
+seems to be necessary.  Adjustments to resumption patterns also, which were
+producing incorrect types.
+
+
+----------------------------------------------------------------------
+-- 2010.08.17
+----------------------------------------------------------------------
+
+Third time's a charm; began working on a brand new implementation of the
+intermediate form.  In the course of dealing with function application, this
+raises the question of whether CT has a CBN or CBV strategy, which I'm not
+sure has ever been settled.
+
+Awaiting word on this point.
+
+
+----------------------------------------------------------------------
+-- 2010.08.19
+----------------------------------------------------------------------
+
+May need to revisit typing (and possibly parsing) of loop, as the definition
+has changed again, albeit only slightly.  A small amount of thought reveals
+that it is unnecessary to apply 'loop' in the same way that 'fix' is applied;
+I never liked this idiom, as it complicates the syntax and looks weird.
+Suggest instead:
+
+  loop_R :: (a -> R b) -> (a -> R b)
+  loop_R f = f >>= loop_R f
+
+This is, in fact, equivalent to the definition above (the 'Maybe' like
+structure omitted for simplicity), but leads to a cleaner usages, where
+the variable in the argument to 'loop' is initialized simply by choosing
+the appropriate LHS for the bind in which 'loop' occurs on the RHS, e.g.
+
+  step_R (put G 0 >> get G) >>=
+  loop_R
+  (\x ->
+
+    step_R (get G >>= \v -> put G (v + 1) >> return v)
+
+  )
+
+Note how the value passing falls naturally out of the usual semantics for
+monadic return values.
+
+
+----------------------------------------------------------------------
+-- 2010.08.23
+----------------------------------------------------------------------
+
+Noted some possible ambiguities (or maybe just misunderstandings on my part)
+the correct typing of loop expressions, specifically as pertaining to
+the placement of parentheses in monadic terms.  The typechecker appears
+to respect the usual rules, but is sensitive to the presence (or absence)
+of application; both of:
+
+  step k >>= \v ->
+  (loop (\x -> r) v) >>= \u -> return u
+
+and
+
+  (step k >>= 
+    ((loop (\x -> r)) v)
+  ) >>= \u -> return u
+
+are correct, but the parentheses are necessary in the second.
+
+Upon reflection, this is not a bug at all, but it would be nice if
+parentheses were not necessary in this case.
+
+Turned up several cases where vestiges of 'fix' were getting in the way,
+specifically a blatant error in transliteration between ASTs by 'toinast',
+and in the alpha-conversion in 'ScopeVars'.  Fixed these.
+
+
+----------------------------------------------------------------------
+-- 2010.09.07
+----------------------------------------------------------------------
+
+Built a primitive for resumption deconstruction into the front-end,
+i.e. 'resume', defined as:
+
+  resume :: R a -> R (R a)
+  resume r = case r of
+               (Pause x) -> step x
+               (Done _)  -> step (return r)
+
+For more information on the semantics, details of the compilation,
+see 'CT-1.0/Documentation/talk-2010.08.27.tex'.
+
+----------------------------------------------------------------------
+-- 2010.09.08
+----------------------------------------------------------------------
+
+Found yet another ommission in 'ScopeVars' that was causing errors
+in the intermediate pass.  Another ommission?  Really?
+
+This one was an oversight during the addition of 'resume' to the front-end;
+because I made the mistake of writing 'ScopeVars' with a default case,
+and failed to add a case for 'resume', the argument was being passed over.
+
+Found and fixed the problem.
+
+
+----------------------------------------------------------------------
+-- 2010.09.09
+----------------------------------------------------------------------
+
+Added another missing case to the inliner ('CTLoopApp') after discovering
+problems when applying the inliner to some of the new test cases.
+This resolved the problem.
+
+
+----------------------------------------------------------------------
+-- 2010.09.21
+----------------------------------------------------------------------
+
+Some minor restructuring of the front-end's handling of the reactive signals;
+change in focus toward general compilation has made the distinguished
+'signal' declaration seem unnecessary, and potentially rather clunky.
+
+Made some small tweeks to the parser, typechecker so that the 'signal' dec is no
+longer used in the declaration of a reactive resumption monad; ordinary
+data declarations are used instead, as in the usual Haskell idiom.
+
+Currently leaving the vestiges of 'signal', including: 'ReqTy', 'RspTy', a
+few simple static checks in the first pass after the parser, and some extra
+structure in the type checker.  Routing around these, however; if it does
+indeed turn out that 'signal' is unwanted, these should be removed later.

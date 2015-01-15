@@ -1,0 +1,109 @@
+-- ***********************
+-- Enqueue (ENQ) FSM
+-- ***********************
+-- FSM that controls ENQ
+-- (write) operations
+-- ***********************
+CS: current_state;
+NS: next_state;
+
+GENERICS:
+ADDR_WIDTH, integer, 9;
+DATA_WIDTH, integer, 8;
+
+PORTS:
+data_in, in, std_logic_vector(0 to DATA_WIDTH-1);
+enq, in, std_logic;
+full_flag, in, std_logic;
+enq_busy_flag, out, std_logic;
+tail_ptr_out, out, std_logic_vector(0 to ADDR_WIDTH-1);
+
+CONNECTIONS:
+tail_ptr_out        <= tail_ptr;
+enq_busy_flag       <= enq_busy;
+
+MEMS:
+mem, DATA_WIDTH, ADDR_WIDTH, EXTERNAL;
+
+CHANNELS:
+
+-- FSM SIGNAL DEFINITIONS - name, type
+SIGS:
+local_data, std_logic_vector(0 to DATA_WIDTH-1);
+enq_busy, std_logic;
+tail_ptr, std_logic_vector(0 to ADDR_WIDTH-1);
+addr_ptr, std_logic_vector(0 to ADDR_WIDTH-1);
+
+-- FSM INITIAL STATE
+INITIAL: make_secure;
+
+-- FSM STATE TRANSITIONS - from -> to 
+TRANS:
+
+make_secure -> scrub_ram where
+{
+    -- Assert enq_busy
+    enq_busy'   <= '1';
+
+    -- Initialize last RAM entry
+    mem[ALL_ONES]   <= ALL_ZEROS;
+
+    -- Reset address counter
+    tail_ptr'       <= ALL_ZEROS;
+
+    -- Set "stop" point
+    addr_ptr'       <= ALL_ONES;
+}
+
+-- Initialize all RAM entries and then go to reset state
+scrub_ram | ( tail_ptr < addr_ptr) -> scrub_ram where
+{
+    mem[tail_ptr]   <= ALL_ZEROS;
+    tail_ptr'       <= tail_ptr + 1;
+}
+scrub_ram -> reset
+
+reset -> idle where
+{
+    -- Initialize all local signals
+    local_data'     <= ALL_ZEROS;
+    addr_ptr'       <= ALL_ZEROS;
+    tail_ptr'       <= ALL_ZEROS;
+    enq_busy'       <= '0';
+} 
+
+
+idle | (enq = '1') -> enqueue where
+{
+    -- Assert enq_busy
+    enq_busy'       <= '1';
+
+    -- Store data to be ENQ'ed
+	local_data'	<= data_in;
+}
+idle -> idle where
+{
+    -- De-assert enq_busy
+    enq_busy'   <= '0';
+}
+	enqueue | (full_flag = '0') -> update_status where
+	{
+	    -- Store data in queue
+		mem[tail_ptr] <= local_data;
+	
+	    -- Update tail pointer
+		tail_ptr' <= tail_ptr + 1;
+	}
+    enqueue -> update_status
+
+update_status -> idle where
+{
+    -- De-assert busy signal
+    enq_busy'   <= '0';
+
+    -- SECURITY - Clear local data reg
+    local_data' <= ALL_ZEROS;
+}
+
+VHDL:
+

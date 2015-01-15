@@ -1,0 +1,24 @@
+
+monad K = StateT(Int) One + StateT (Int) Two
+monad R = ResT K
+
+monad Re = ReactT Req Rsp K
+
+data Req = Read1 | Read2 | Write1 | Write2
+
+data Rsp = OK | FAIL
+
+
+smc :: (Re Int) -> (R Int)
+smc r =
+ getreq r >>= \q ->
+ if (q == Read1) then step_R (get One)
+ else if (q == Read2) then step_R (get Two)
+ else if (q == Write1) then step_R (put One 1) >> return 0
+ else if (q == Write2) then step_R (put Two 1) >> return 0
+ else return 0
+
+
+-- the initial argument here is really just a dummy to satisfy the type checker
+main :: (R Int)
+main = (smc (signal Read1 >> return 0)) >> return 0

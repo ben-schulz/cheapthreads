@@ -1,0 +1,22 @@
+
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+inc :: (K Int)
+inc = get G >>= \n ->
+      put G (n + 1) >>
+      return n
+
+main :: (R Int)
+main =
+  (fix (\k -> \nothing ->
+
+    step_R(inc) >>= \n ->
+    k nothing >>
+    return n                   -- how many copies of 'n' must there be?
+
+  )) ()
+
+

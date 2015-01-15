@@ -1,0 +1,22 @@
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+monad Re = ReactT Req Rsp K
+
+data Req = Cont
+         | Kill
+
+data Rsp = Ack
+         | Die
+
+main = getreq phi >>= \q ->
+       if q == Cont
+       then resume_Re phi Ack
+       else resume_Re phi Die
+
+phi :: (Re ())
+phi = signal Cont >>= \rsp ->
+      if rsp == Die then return () else step_Re (put G 1)
+

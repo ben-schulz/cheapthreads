@@ -1,0 +1,383 @@
+
+\documentclass{beamer}
+
+\usepackage[utf8x]{inputenc}
+\usepackage{default}
+\usepackage{amsmath}
+\usepackage{proof}
+\usepackage{graphics}
+
+\newcommand{\compile}[1]{\ensuremath{\lceil #1 \rceil}}
+\newcommand{\ptransform}[1]{\ensuremath{\lfloor #1 \rfloor}}
+
+\title{``A Theory of Program Size Formally Identical to Information Theory''
+       (Gregory Chaitin, 1975)}
+\subtitle{A Quick Overview}
+
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\maketitle{}
+
+\begin{frame}{Intro: Elements of Classical Information Theory}
+
+\begin{structure}{Fundamental Problem of CIT}\\
+ Given some event $X$ occuring at point $Alice$, reproduce the essential
+ features of $X$ at point $Bob$, using medium $M$.  The scheme used to do
+ this is referred to as a \textbf{code}.
+\end{structure}
+
+\bigskip
+
+\begin{structure}{Essential Subproblems}\\
+ \begin{itemize}
+  \item{Given finite capacity of the medium or channel $M$, choose
+        functions $encode : Alice \rightarrow M$ and
+        $decode : M \rightarrow Bob$ that most efficiently use $M$,
+        i.e. construct a code that is optimal wrt M.}
+  \item{Construct a code to accurately transmit over $M$ even in the presence of
+        non-deterministically occurring error.}
+ \end{itemize}
+\end{structure}
+
+\color{red}{\emph{Both of these problems are fully solved!}}
+
+\color{black}
+{In that sense, CIT can be considered a highly successful theory.}
+
+\end{frame}
+
+
+
+%%% slide 2
+\begin{frame}{Entropy}
+
+\begin{structure}{Definition of Entropy}
+
+ Given a random variable $X = \{x_i\}_{i=1}^{M}$, with respective probabilities
+ $\{p_i\}_{i=1}^{M}$, then the \textbf{entropy} of $X$, written $H(X)$
+ is given by
+ $-C\sum_{i=1}^{M}{p_i log(p_i)}$, where $C$ is some suitably chosen constant.
+
+\end{structure}
+
+\bigskip
+
+
+\begin{structure}{Interpretations of Entropy}
+\begin{itemize}
+
+ \item{A lower bound on the average number of bits needed to uniquely
+       specify an outcome in $X$}
+
+ \item{A measure of the number of \emph{typical sequences} occuring in $X$,
+       i.e. the number of sequences of outcomes wherein each outcome occurs
+       with its expected frequency. (There are $\approx 2^{Hn}$ such sequences
+       of length $n$)}
+
+ \item{Note that H(X) is lower when $p_i$ are very uniform, and higher when
+       they show greater variation.}
+
+\end{itemize}
+\end{structure}
+
+\textbf{Entropy characterizes ``how much space''
+is required in order to faithfully transmit X from Alice to Bob.}
+
+\end{frame}
+
+
+%%% slide 3
+\begin{frame}{An Analogy Between Computation and Communication}
+
+\begin{structure}{Computation is to communication as ... }
+\begin{itemize}
+
+ \item{computer :: decoder}
+
+ \item{programs :: code words}
+
+ \item{result :: decoded message}
+
+\end{itemize}
+\end{structure}
+
+\medskip
+
+\textbf{Is there an analogous notion of entropy?}
+
+\medskip
+
+\begin{structure}{There is!}
+\begin{itemize}
+ \item{Entropy is simply program length}
+ \item{Program length and classical entropy both satisfy
+       $H(A, B) = H(A) + H(B/A) + \Delta$, where $\vert \Delta \vert$
+       is bounded$^*$}
+ \item{... as well as a number of other important identities}
+\end{itemize}
+\end{structure}
+
+\small{$^*$given an important assumption to be discussed}
+
+\end{frame}
+
+%%%% slide 4
+
+\begin{frame}{Formal Development of the Analogy: Definitions}
+
+\begin{structure}{Random variable}
+ Let $X = \{0, 1\}^*$, and let $p, q \in X$.
+\end{structure}
+
+\medskip
+
+\begin{structure}{Definition: Concrete Computer}
+ A \emph{computer} $C$ is a Turing machine with separate program and work tapes,
+ with the program tape finite.  Let $C(p, q)$ denote the \emph{result} of the
+ computation with $p$ on the program tape and $q$ initially on the work tape.
+\end{structure}
+
+\medskip
+
+\begin{structure}{Definition: Abstract Computer}
+ A \emph{computer} is (also) a partial recursive function
+ $C : X \times X \rightarrow X$ with the property that for each input
+ $q$, and each function $P_q : X \rightarrow X$ where $P_q(p) = C(p, q)$,
+ the domain of $P_q$ is an \emph{instantaneous code}.
+\end{structure}
+
+\smallskip
+
+\textbf{These definitions are equivalent!}
+
+\smallskip
+
+\begin{structure}{Definition: Optimal Universal Computer}
+ A computer $U$ is an \emph{optimal univeral computer} if and only if for each
+ computer $C$ there exists a constant $sim(C)$ such that if $C(p, q)$
+ is defined, then there exists $p\prime$ such that
+ $U(p\prime, q) = C(p, q)$ and $\vert p\prime \vert \leq \vert p \vert + sim(C)$
+
+\end{structure}
+
+\end{frame}
+
+%%% frame 5
+
+\begin{frame}{Program Entropy: Canonical Programs}
+
+\emph{Assume some fixed optimal universal computer U}
+
+\medskip
+
+\begin{structure}{The Canonical Program: }
+ $\overline{s} = min\ \{p \in X\ \vert\ U(p, \epsilon) = s\}$
+\end{structure}
+
+\medskip
+
+\begin{structure}{Program Entropy Defined}\\
+\begin{tabular}[t]{lll}
+ $H_C(s)$ &=& $min \{ \vert p \vert\ \mid C(p, \epsilon) = s \}$\\
+ $H_C(s/t)$ &=& $min \{ \vert p \vert\ \mid C(p, \overline{t}) = s \}$\\
+ $H$ &=& $H_U$\\
+ \color{red}{$\implies H(s) = \vert \overline{s} \vert$}
+\end{tabular}
+\end{structure}
+
+\medskip
+
+\begin{itemize}
+ \item{The entropy of a program is determined by its length with respect to
+       the chosen universal computer}
+
+ \item{The entropy of a program given some input $H(s/t)$ is determined
+       by the length of the corresponding program that produces $s$ from the
+       canonical program for $t$}
+
+ \item{The choice of $U$ essentially determines the code, i.e. the ordering
+       of the elements of $\overline{X}$}
+       
+\end{itemize}
+
+\end{frame}
+
+
+%%%% slide 6
+
+\begin{frame}{Self-Delimiting Programs and Instantaneous Codes}
+
+\begin{structure}{Definition:}
+ A code is \emph{instantaneous} if and only if no code word is a proper prefix
+ of any other code word.
+\end{structure}
+
+\medskip
+
+\begin{structure}{Kraft's Inequality}
+ For any binary code $\kappa$,
+  \[\sum_i 2^{-n_i} \le 1 \]\\
+ where $n_i$ is the number of code words of length $i$ in $\kappa$,
+ is necessary and sufficient condition for $\kappa$ instantaneous.
+
+\end{structure}
+
+\begin{structure}{Theorem:}
+ It is possible to construct a computer $C$ satisfying the
+ requirement that there is a set of tuples $T = \{ (s_i, n_i) \}_{i \in I}$
+ such that $C(p, \epsilon) = s_i \iff \vert p \vert = n_i
+ \land (s_i, n_i) \in T$, where $n_i$ satisfy Kraft's inequality.
+\end{structure}
+
+\end{frame}
+
+%%%% slide 7
+\begin{frame}{Self-Delimiting Programs Continued}
+
+Why should it matter whether a program is self-delimiting?
+
+\bigskip
+
+\begin{structure}{If programs are not self delimiting, then:}
+
+ in $H(s, t) = H(s) + H(t/s) + \Delta(s, t)$,
+ \color{red}{$\Delta(s,t)$ is not bounded!}
+ 
+\end{structure}
+
+\medskip
+
+\begin{structure}{$\Delta(s, t)$ is unbounded because ...}
+
+ if $s$ is a prefix of $t$, then $t$ can be obtained from $s$ using direct
+ string operations, meaning that $\Delta$ depends on the syntactc relation
+ between $s$ and $t$, which is \emph{irrelevant} of $U$ and hence $H$.
+
+\end{structure}
+
+\medskip
+
+\begin{structure}{However, assuming self-delimiting programs,}
+
+ $H(s, t) = H(s) + H(t/s) + O(1)$ as desired.
+
+\end{structure}
+
+\end{frame}
+
+%%%% slide 8
+
+\begin{frame}{Program Entropy: Identities Analogous to CIT}
+
+\begin{structure}{Read:}\\
+  $H(s, t)$ as ``entropy of $s$ followed by $t$'';\\
+  $H(s/t)$ as ``entropy of $s$ with input $t$''
+\end{structure}
+
+\medskip
+
+\begin{structure}{Then for both definitions of H:}
+ \begin{center}
+ \begin{tabular}[t]{lll}
+  $H(s, t)$ &=& $H(t, s) + O(1)$\\
+  $H(s/s)$ &=& $O(1)$\\
+  $H(s)$ &$\le$& $H(s,t) + O(1)$\\
+  $H(s/t)$ &$\le$& $H(s) + O(1)$\\
+  $H(s, t)$ &$\le$& $H(s) + H(t/s) + O(1)$\\
+ \end{tabular}
+ \end{center}
+\end{structure}
+
+\medskip
+
+\begin{structure}{}
+ \begin{itemize}
+  \item{Joint experiments
+        (programs) are symmetric wrt entropy}
+  \item{The amount of information an event (program) conveys
+        about itself is constant}
+  \item{Events (programs) with no input convey more information than programs
+        with input}
+  \item{Events (program/input strings under $U$) that depend on one another
+        convey less information than independent events}
+ \end{itemize}
+\end{structure}
+
+\end{frame}
+
+
+%%%% slide 9
+\begin{frame}{The Big Result}
+
+\begin{structure}{Definition}
+ A string $s$ is \emph{random} iff
+ $H(s) \approx \vert s \vert + H(\vert s \vert)$,
+ i.e. the program that computes $s$ is approximately as long as $s$ itself.
+\end{structure}
+
+\bigskip
+
+\begin{structure}{Theorem (Construction of a random infinite string)}
+  Given an optimal universal computer $U$, the binary representation of the
+  probability that $U$ halts for a randomly selected input is a random
+  string, i.e. a transcendental number.
+\end{structure}
+
+\bigskip
+
+... since otherwise it would be possible to encode programs as digits of
+the probaility and thus solve the halting problem.
+
+\bigskip
+
+For the full development of this result, see:\\
+\textit{Algorithmic Information Theory} (Chaitin 1987)
+
+
+
+\end{frame}
+
+%%% slide 10
+\begin{frame}{Summary}
+
+ \begin{structure}{}
+  \begin{itemize}
+   \item{Fixing a model of computation is formally identical to choosing
+         a code for a random variable}
+   \item{There are analogous notions of entropy/complexity for both codes and
+         for computer programs for which all the identities, inequalities of
+         classical information theory hold}
+   \item{The stipulation that programs are self-delimiting is very important
+         in certain theoretical contexts}
+   \item{It is possible to construct an uncomputable, transcendental number
+         (given the Axiom of Choice)}
+  \end{itemize}
+ \end{structure}
+
+\end{frame}
+
+%%%% last slide
+\begin{frame}{Related Work}
+
+
+ \begin{center}
+  \includegraphics[width=4cm]{strangelove.jpeg}
+  \includegraphics[width=4cm]{turingMachine.gif}\\
+  ``The data is fed into a computer ...''
+ \end{center}
+
+\begin{structure}{See Also}
+ \begin{itemize}
+
+ \item{``Computational complexity and probability constructions'' (Willis 1970)}
+ \item{``On the logical foundations of information theory and probability theory'' (Kolmogorov 1969)}
+ \item{``A formal theory of inductive inference'' (Solomonoff 1964)}
+
+ \end{itemize}
+\end{structure}
+
+\end{frame}
+
+\end{document}

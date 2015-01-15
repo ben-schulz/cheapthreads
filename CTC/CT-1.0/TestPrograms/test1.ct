@@ -1,0 +1,6 @@
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main = step_R(put G 0 >> get G >>= \v -> return (v + 1)) >>= \v -> return v

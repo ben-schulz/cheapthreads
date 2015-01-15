@@ -1,0 +1,12 @@
+monad TacM = EnvT(Code) Code + EnvT(LabelMap) LabelMap + StateT(PC) PC + StateT(RegFile) RegFile + StateT(Memory) Memory + Io
+
+import CT.Compiler.ThreeAddressCode
+
+type Word     = Int
+type Loc      = Int
+
+type Code     = PC -> TacCommand
+type LabelMap = Label -> PC
+type PC       = Int
+type RegFile  = Register -> Word
+type Memory   = Loc -> Word

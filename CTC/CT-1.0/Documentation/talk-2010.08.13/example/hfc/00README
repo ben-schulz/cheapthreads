@@ -1,0 +1,22 @@
+The files in this directory contain the complete source of a
+presentation on Hydrogen Fuel Cells.
+
+To compile, type:
+
+   make
+
+This will execute the commands in the provided Makefile and generate
+the file hfc.pdf.
+
+Alternatively, without using the Makefile, you may do:
+
+   pdflatex hfc.tex
+   pdflatex hfc.tex
+
+to generate hfc.pdf.  You need to run the pdflatex twice to allow
+LaTeX to resolve page numbers, otherwise the page numbers in the
+footlines will be wrong.
+
+Rouben Rostamian <rostamian@umbc.edu>
+December 2004
+

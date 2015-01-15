@@ -1,0 +1,61 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[utf8x]{inputenc}
+
+%opening
+\title{A cleaner looking syntax for RSI}
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\maketitle
+
+
+\section{}
+
+\begin{tabular*}{10cm}[]{lc}
+{
+\begin{minipage}[t]{3.5cm}
+
+\scriptsize{
+
+$
+\begin{array}[t]{lcl}
+
+Code &::=& R \mid K\\
+R &::=& Label\ Chain\\
+K &::=& Label\ Block\\
+Block &::=& Label\ ASM\\
+\end{array}
+$
+
+}  % end fontsize
+
+\end{minipage}
+}
+
+{
+\begin{minipage}[t]{1.85in}
+
+\begin{scriptsize}
+
+$
+\begin{array}[t]{lcl}
+
+Chain &::=& Block\texttt{;}\ Chain\\
+&\mid& Label\ \texttt{branch}\ Expr\ Label\\
+&\mid& Label\ \texttt{jump}\ Ref\ Chain\\
+&\mid& Label\ \texttt{halt}\\
+\end{array}
+$
+\end{scriptsize}
+\end{minipage}
+}
+\end{tabular*}
+
+\medskip
+\scriptsize
+{\ \ \ \ \ $ASM ::= Stmt\texttt{;}\ ASM\ \mid \texttt{branch}\ Expr\ Block\ Block\ Block\ \mid \texttt{jump}\ Ref\ ASM$}
+%\end{onlinebox}
+
+
+\end{document}

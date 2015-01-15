@@ -1,0 +1,97 @@
+-- ***********************
+-- Queue FSM
+-- ***********************
+-- Single FSM controlling
+-- both ENQ and DEQ ops
+-- ***********************
+CS: current_state;
+NS: next_state;
+
+GENERICS:
+ADDR_WIDTH, integer, 9;
+DATA_WIDTH, integer, 8;
+
+PORTS:
+empty_flag, out, std_logic;
+full_flag, out, std_logic;
+data_valid_flag, out, std_logic;
+deq_busy_in, in, std_logic;
+enq_busy_in, in, std_logic;
+head_ptr_in, in, std_logic_vector(0 to ADDR_WIDTH-1);
+tail_ptr_in, in, std_logic_vector(0 to ADDR_WIDTH-1);
+
+CONNECTIONS:
+empty_flag  <= empty;
+full_flag   <= full;
+data_valid_flag <= data_valid;
+
+MEMS:
+
+CHANNELS:
+
+-- FSM SIGNAL DEFINITIONS - name, type
+SIGS:
+empty, std_logic;
+full, std_logic;
+data_valid, std_logic;
+
+-- FSM INITIAL STATE
+INITIAL: reset;
+
+-- FSM STATE TRANSITIONS - from -> to 
+TRANS:
+
+reset -> calculate where
+{
+    -- Initialize all status signals
+    empty'  <= '1';
+    full'    <= '0';
+    data_valid' <= '0';
+}
+
+calculate -> calculate where
+{
+    empty'      <= calculate_empty(head_ptr_in, tail_ptr_in);
+    full'       <= calculate_full(head_ptr_in, tail_ptr_in);
+    data_valid' <= calculate_valid(head_ptr_in, tail_ptr_in, deq_busy_in);
+
+}
+
+VHDL:
+
+function calculate_empty(head : std_logic_vector(0 to ADDR_WIDTH-1); tail : std_logic_vector(0 to ADDR_WIDTH-1)) return std_logic is
+    variable val  : std_logic := '0';
+begin
+    if (head = tail) then
+        val := '1';
+    else
+        val := '0';
+    end if;
+
+    return val;
+end function calculate_empty;
+
+function calculate_full(head : std_logic_vector(0 to ADDR_WIDTH-1); tail : std_logic_vector(0 to ADDR_WIDTH-1)) return std_logic is
+    variable val  : std_logic := '0';
+begin
+    if (head = tail + 1) then
+        val := '1';
+    else
+        val := '0';
+    end if;
+
+    return val;
+end function calculate_full;
+
+function calculate_valid(head : std_logic_vector(0 to ADDR_WIDTH-1); tail : std_logic_vector(0 to ADDR_WIDTH-1); deq_busy : std_logic) return std_logic is
+    variable val  : std_logic := '0';
+begin
+    if (head = tail) then
+        val := '0' and (not deq_busy);
+    else
+        val := '1' and (not deq_busy);
+    end if;
+
+    return val;
+end function calculate_valid;
+

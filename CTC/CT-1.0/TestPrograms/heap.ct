@@ -1,0 +1,173 @@
+--
+-- this is ~/cheapthreads/CTC/CT-1.0/TestPrograms/gc.ct
+--
+-- a version of the garbage-collecting interpreter from the PEPM'10 paper
+--
+-- original example in ~/cheapthreads/GarbageCollection/GPCE09-code/GC.hs
+--
+-- put here 2010.04.29
+--
+-- Schulz
+--
+
+monad K = MemT 128 (V) Sto
+        + StateT (Loc) Last
+
+monad R  = ResT K
+monad Re = ReactT Q K
+
+type Name = String
+type Loc  = Int
+
+type Env = [(Name, Loc)]
+
+type Stack = [Env]
+
+type LocEnv = [(Name,Loc)]
+
+type Heap = [(Loc, V)]
+
+signal Q = (Cont, Ack)
+         | (RdEnv, Val1 V)
+         | (InEnv LocEnv (Re V), Val2 V)
+
+
+data V = Wrong
+       | Error String
+       | Num Int
+       | Cl Name Term LocEnv
+       | Environ LocEnv
+       | Empty          -- tag for an empty storage location
+
+data Term = Var Name
+          | Con Int
+          | Add Term Term
+          | Lam Name Term
+          | App Term Term
+          | LetRef Name Term Term
+          | Deref Term
+          | PutRef Term Term
+          | Seq Term Term
+          | IFZERO Term Term Term
+
+main = interp
+
+add t1 t2 = case (t1, t2) of
+              (Num i, Num j) -> return (Num (i + j))
+              _              -> return (Error "add")
+
+--signalV :: Q -> (Re V)
+signalV q = signal q >>= \rsp ->
+            case rsp of
+              (Val1 v)    -> return v
+              (Val2 v)    -> return v
+
+xEnv :: LocEnv -> Name -> Loc -> LocEnv
+xEnv e n l = (n, l):e
+
+lkup x bs = case bs of
+              ((y, b):bs) -> if (x == y) then b else (lkup x bs)
+
+writeLoc :: Loc -> V -> (K ())
+writeLoc l v = put Sto[l] v >> return ()
+
+read :: Loc -> (K V)
+read l = get Sto[l] >>= \v -> return v
+
+findFreeLoc :: (R Loc)
+findFreeLoc =
+
+  ((fix (\k -> \i ->
+
+    step_R(get Sto[i]) >>= \v ->
+
+    if (v == Empty)
+    then return i
+    else k (i + 1)
+
+    )
+
+  ) 0)
+
+storeK :: V -> (K Loc)
+storeK v = findFreeLoc >>= \l -> writeLoc l v >> return l
+
+rdenvRe :: (Re V)
+rdenvRe = signalV RdEnv
+
+--inenvRe :: Env -> (Re V) -> (Re V)
+inenvRe rho x = signalV (InEnv rho x)
+
+prj e = case e of
+          (Environ r) -> r
+
+mkfunRe :: Name -> Term -> (Re V)
+mkfunRe x e = rdenvRe >>= \r -> return (Cl x e (prj r))
+
+--storeRe v = signal (Store v)
+
+appEnvRe :: Name -> (Re V)
+appEnvRe x = rdenvRe >>= \rho -> step_Re(read(lkup x (prj rho)))
+
+--applyRe :: V -> V -> (Re V)
+applyRe u v = case u of
+                (Cl x e rho) -> step_Re(storeK v) >>= \l ->
+                                inenvRe (xEnv rho x l) (interp e)
+
+interp :: Term -> (Re V)
+interp term =
+
+      case term of
+       (Var x)   -> appEnvRe x 
+       (Con n)   -> return (Num n)
+
+       (Add u v) -> (interp u) >>= \a ->
+                    (interp v) >>= \b ->
+                    add a b
+
+       (Lam x e) -> mkfunRe x e
+
+       (App t u) -> interp t >>= \f ->
+                    interp u >>= \a ->
+                    applyRe f a
+
+       (IFZERO t1 t2 t3) ->  interp t1 >>= \v ->
+                               case v of
+                                 (Num 0) -> interp t2
+                                 (Num _) -> interp t3
+                                 _       -> return (Error "IFZERO")
+
+       _         -> return (Error "f*ck your couch!")
+
+
+
+
+
+--hand :: LocEnv -> (Re V) -> (R (Re V))
+hand rho r = case r of
+               (D v)                     -> return (return v)
+               (P (Cont, r))             -> step_R (r Ack)
+
+               (P (RdEnv, r))            ->  step_R (r (Val1 (Environ rho)))
+
+               (P ((InEnv rho' phi), r)) -> (hand rho' phi) >>= \t ->
+                                            step_R (t >>= \v -> r (Val v))
+
+
+
+
+--
+-- this is ridiculous, but I'm trying
+-- to temporarily pacify the type-checker
+--
+-- 2010.05.14 Schulz
+--
+head xs = case xs of
+            (x:_) -> [x]
+
+
+--
+-- the garbage collector is stubbed here
+-- because we choose to leave it unspecified
+
+gc stk = return stk

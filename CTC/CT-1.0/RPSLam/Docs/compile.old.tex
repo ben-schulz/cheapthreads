@@ -1,0 +1,247 @@
+\documentclass[a4paper,10pt]{article}
+
+\usepackage{amsmath}
+\usepackage{proof}
+
+%opening
+\title{A Lambda Calculus Compiler Demonstrating the Resumption-Passing Style}
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+This document describes a straightforward method for compiling a call-by-value lambda calculus 
+
+\end{abstract}
+
+\section{Source Language}
+
+\subsection{Syntax}
+
+The source language for this demonstration is given by a standard formulation of PCF, which extends the basic lambda calculus to incorporate a fixpoint operator, conditional expressions, the successor and predecessor functions, as well as integer and boolean constants:\\
+
+\begin{tabular}[t]{lll}
+$M$ &::=& $V$ $\vert$ ($M$ $M$)\\
+$V$ &::=& $C$ $\vert$ $x$ $\vert$ $\lambda x.M$\\
+          &&$\vert$ $\mu x.M$ $\vert$ \texttt{if} $M$ \texttt{then} $M$ \texttt{else} $M$\\
+          &&$\vert$ \texttt{zero?} $M$ $\vert$ \texttt{1+} $M$ $\vert$ \texttt{1-} $M$\\
+$C$ &::=& 0 $\vert$ 1 $\vert$ ... $\vert$ \textbf{false} $\vert$ \textbf{true} $\vert$ \textbf{wrong}\\
+\end{tabular}
+
+
+\subsection{Semantics}
+
+We use a standard call-by-value semantics, as given in the following straightforward definitional interpreter:\\
+
+[which is honestly much clearer as Haskell, and is located at:
+
+	'$\sim$/CT-1.0/RPSLam/PCF/DefInterp.hs'
+
+]
+
+%\begin{tabular}[t]{lllll}
+%interp $\rho\ (T\ T\prime)$ &=& case (interp $\rho\ T$) of\\
+
+%&&\ \  \textbf{cl} $<x, \rho\prime, T\prime\prime>$ $\rightarrow$ interp $\rho\prime[x \mapsto $interp $\rho\ T\prime]\ T\prime\prime$\\
+%&&\ \ \textbf{reccl} $<x, \rho\prime, t>$ $\rightarrow$ interp $\rho\prime[x \mapsto $interp $\rho\ T\prime]\ T\prime\prime$\\
+%&&\ \ \_ $\rightarrow$ \textbf{wrong}\\
+%\\
+
+%interp $\rho\ (\lambda x. T)$ &=& \textbf{cl} $<x, \rho, T>$\\
+%\\
+%interp $\rho\ (\mu x. T)$ &=& interp $\rho[x \mapsto \textbf{reccl} <x, \rho, (\mu x. T)>]\ T$\\
+%\\
+%interp $\rho\ x$ &=& case ($rho\ x$) of\\
+%&&\ \  \textbf{reccl} $<x\prime, \rho\prime, T> \rightarrow$ interp $\rho'\ T$\\
+%&&\ \ $v \rightarrow v$\\
+
+
+
+%interp $\rho\ ()$ =\\
+
+%\end{tabular}
+
+\section{The Resumption Passing Transformation}
+
+\subsection{Overview and Motvation}
+
+Resumption-passing style (RPS) reifies control flow by making explicit the execution steps in the input program's execution, as given by its operational semantics.  The RPS transform replaces syntactic productions with corresponding signalling operations, which pass information on the state of program execution to a handler that implements the operational semantics of the source language.  The handler is responsible for all other aspects of directing control flow, including recursion.  As a result, the action of the transformed source term consists entirely of making requests and processing responses, which allows for the RPS transform to be obtained by an always terminating interpretation of the abstract syntax tree.\\
+
+The compiler presented here operates by applying the RPS transformation to an input term in the source language, and compiling the resulting RPS term to a simplified imperative language.  The resulting object code is bound to the symbol \texttt{main} in a separate RPS program, \texttt{handler}, which specifies the evaluation procedure given by the source language semantics.
+
+\subsection{Syntax of the RPS Term Language}
+
+The RPS intermediate language borrows the syntax of the monadic style, to express programs as effectful actions.  Terms are formed using monadic bind to sequence actions.  The terms produced by directly applying RPS to the PCF term require minimal functionality; their primary purpose is to specify the operations of \texttt{handler}.  As such, expressions are limited to variable references, constants, the increment-decrement operations implied by the successor and predecessor functions, as well as simple pattern-matching primitives.  Expressible values include integers, booleans, and closures.\\
+
+\begin{tabular}[t]{lll}
+ 
+$T$ &::=& $A\ \star\ \lambda x . T$ $\vert$ $A \gg$  $T$ $\vert$ \texttt{if} $X$ \texttt{then} $M$ \texttt{else} $M$\\
+$A$ &::=& $\eta\ X\ \vert $ \texttt{signal} $Q$\\
+\\
+$Q$ &::=& $\texttt{apply}\ X\ X$ $\vert$ \texttt{mkcl} $x\ T\ \vert$ \texttt{mkreccl} $x\ T\ \vert$ \texttt{lkp} $x$\\
+\\
+$X$ &::=& $C\ \vert\ x\ \vert $ \texttt{inc} $X\ \vert $ \texttt{dec} $X\ \vert X$ \texttt{==} $X$\\
+&&$\vert $ \texttt{isnum}\ $X \vert $ \texttt{isbool}\ $X \vert $ \texttt{iscl}\ $X \vert $ \texttt{isreccl}\ $X$\\
+&&$\vert$ \textbf{cl} $<x, \rho, T> \vert $ \textbf{reccl} $<x, \rho, T>$\\
+
+$C$ &::=& 0 $\vert$ 1 $\vert$ ... $\vert$ \textbf{false} $\vert$ \textbf{true} 
+
+\end{tabular}
+
+
+\subsection{Semantics of the RPS Language}
+
+The semantics of the RPS language above are derived for the denotational semantics of the resumption and reactive resumption monads.  A resumption term specifies the sequencing of a computation; a reactive resumption term implicitly specifies control flow relative to a $handler$ function that processes its requests and provides responses used to determine the remainder of the reactive computation.  This relation is succinctly expressed by the standard type signature for such a handler:\\
+
+$handler :: Re\ a \longrightarrow \ R\ b$\\
+
+The $handler$ uses the requests of its reactive operand to structure the resumption term that is its output.
+
+
+\subsection{The Transformation}
+
+Using the definitional interpreter above, the RPS transformation of the source term is obtained in a straightforward syntax-direct fashion as:\\
+
+\begin{tabular}[t]{lll}
+
+%lambda case
+$\lceil \lambda x . T\rceil_{Re}$ &=& \texttt{signal} $($\texttt{mkcl}$\ x\ \lceil T \rceil_{Re})$\\
+%fixpoint case:
+$\lceil \mu x . T\rceil_{Re}$ &=& \texttt{signal} $($\texttt{mkreccl}$\ x\ \lceil T \rceil_{Re})$\\
+%var case
+$\lceil x \rceil_{Re}$ &=& \texttt{signal} $($\texttt{lkp} $x)$\\
+%app case
+$\lceil T\ T\prime\rceil_{Re}$ &=& $\lceil T\prime \rceil_{Re} \star  \lambda x\prime . \lceil T \rceil_{Re}
+  \star \lambda x . $ \texttt{signal} $($\texttt{apply} $x\ x\prime)$\\
+\\
+% conditional expression:
+$\lceil $\texttt{if} $T$ \texttt{then} $T\prime$ \texttt{else} $T\prime\prime \rceil_{Re}$ &=&
+  $\lceil T \rceil_{Re} \star \lambda x.$\\
+    &&\texttt{if} (\texttt{isbool} $x$) \texttt{then} (\texttt{if} $x$ \texttt{then} $\lceil T\prime \rceil_{Re}$ \texttt{else} $\lceil T\prime\prime \rceil_{Re}$) \texttt{else} $\eta$ \textbf{wrong}\\
+%constant case:
+\\
+%all the other cases:
+$\lceil$\texttt{inc} $ T\rceil_{Re}$ &=& $\lceil T \rceil_{Re} \star \lambda x . $\texttt{if} (\texttt{isnum} $x$) \texttt{then} $\eta$ ($x$ + 1) \texttt{else} $\eta$ \textbf{wrong}\\
+$\lceil$\texttt{dec} $ T\rceil_{Re}$ &=& $\lceil T \rceil_{Re} \star \lambda x . $\texttt{if} (\texttt{isnum} $x$) \texttt{then} $\eta$ ($x$ - 1) \texttt{else} $\eta$ \textbf{wrong}\\
+\\
+$\lceil $\texttt{zero?} $T \rceil_{Re}$ &=& $\lceil T \rceil_{Re} \star \lambda x . $\\
+  &&\texttt{if} (0 \texttt{==} $x$) \texttt{then} $\eta$ \textbf{true} \texttt{else}\\
+  && \texttt{if} (\texttt{isnum} $x$) \texttt{then} $\eta$ \textbf{false} \texttt{else} $\eta$ \textbf{wrong}\\
+\\
+$\lceil v \rceil_{Re}$ &=& $\eta$ v\\
+
+\end{tabular}
+\\
+\\
+The conditional expressions in the cases for \texttt{if ... then ... else}, \texttt{inc}, \texttt{dec}, and \texttt{zero?} expressly implement the behavior of the PCF definitional interpreter, which checks for a well-formed value before proceeding with further evaluation, and produces \textbf{wrong} in the case of an error.
+
+\subsection{Syntax of the RPS Handler Language}
+
+The RPS handler language extends the syntax of the term language with a fix-point operator, as well as  productions for matching signals and resumptions, and several primitive monadic actions:\\
+
+\begin{tabular}[t]{lll}
+
+$A$ &::=& $\ldots \vert$ \texttt{rdEnv} $\vert$ \texttt{inEnv} $\rho\ T\ \vert$ \texttt{resume} $x\ X\ \vert$ \texttt{lkp} $x$\\
+
+$T$ &::=& $\ldots \vert$ \texttt{fix} $\lambda k. T\ \vert$ \texttt{case} $X$ \texttt{of }\{\ $P \rightarrow T$\}*
+$\vert$ \texttt{rcase} $x$ \texttt{of }\{\ $R \rightarrow T$\}*\\
+
+$R$ &::=& \texttt{P} ($Q$, $P$) $\vert$ \texttt{D} $P$\\
+$P$ &::=& \_ $\vert$ $x$ $\vert$ \texttt{cl} $P\ P\ P$ $\vert$ \texttt{reccl} $P\ P\ P$\\
+
+\end{tabular}
+\\
+The patterns above could easily be extended with other constructor patterns; for this presentation, however, those constructors already given in the syntax for RPS expressions are sufficient.
+
+
+\section{Compilation of RPS}
+
+\subsection{Target Syntax}
+
+The following simplified imperative language will be used to demonstrate compilation of the RPS language above:
+
+\begin{tabular}[t]{lll}
+$L$ &::=& $label$\\
+$N$ &::=& $string$\\
+$O$ &::=& $S$\texttt{;}$O$ $\vert$ $L$: $O$ $\vert$ \texttt{end}\\
+\\
+$S$ &::=& $R$ \texttt{:=} $X$\\
+&& $\vert$ \texttt{jsr} $R$ $\vert$ \texttt{jsri} $L$ $\vert$ \texttt{return} $\vert$ \texttt{jmp} $R$ $\vert$ \texttt{jmp} $L$\\
+&& $\vert$ \texttt{bz} $X$ $L$ $\vert$\\
+&& $\vert$ \texttt{push} $X$ $\vert$ \texttt{pop} $R$ $\vert$ \texttt{pushenv} $X$ $\vert$ \texttt{popenv}\\
+&& $\vert$ \texttt{lkp} $N$\\
+&& $\vert$ \texttt{nop} $\vert$ \texttt{halt}\\
+\\
+$X$ &::=& $R$ $\vert$ \texttt{inc} $X$ $\vert$ \texttt{dec} $X$\\
+&& $\vert$ $X \land X$ $\vert$ $X \lor X$ $\vert$ $X == X$\\
+&& $\vert$ \texttt{isnum} $X$ $\vert$ \texttt{isbool} $X$  $\vert$ \texttt{iscl} $X$  $\vert$ \texttt{isreccl} $X$\\
+&& $\vert$ \texttt{xEnv} $X$ $X$ $X$ $\vert$ \texttt{topenv}\\
+&& $\vert$ $V$\\
+\\
+$R$ &::=& $x$ $\vert$ $R$.$N$ $\vert$ \texttt{r\_ret} $\vert$ \texttt{r\_nxt} $\vert$ \texttt{r\_done} $\vert$ \texttt{r\_req} $\vert$ \texttt{r\_rsp}\\
+\\
+$V$ &::=& \textbf{wrong} $\vert$ \texttt{num} n $\vert$ \texttt{bool} b\\
+&&$\vert$ \texttt{cl} $N$ $N$ $L$ $\vert$ \texttt{reccl} $N$ $N$ $L$\\
+&&$\rho$ $\vert$ \texttt{label} $L$ $\vert$ \texttt{name} $N$ $\vert$ \texttt{struct} \{($N$,$V$)\}
+
+\end{tabular}
+\\
+\\
+The target syntax presumes two different runtime stacks, one which stores local values necessary for maintaining call frames, and a second which stores environments.  The \texttt{pop} and \texttt{push} operations operate on the frame stack; the \texttt{popenv} and \texttt{pushenv} operate on the environment stack, while the \texttt{topenv} expression non-destructively reads the environment at the top of the stack. The details of variable lookup in environments are unremarkable, and so have been abstracted away in this presentation.
+
+\subsection{Semantics of the Target Language}
+
+(The semantics of the target language are given by the interpreter at:
+
+'$\sim$/CT-1.0/RPSLam/Targets/Interp.hs'
+
+)
+
+\subsection{Compilation from RPS to Target}
+
+Compilation from RPS to the target language is straightforward:\\
+
+\begin{tabular}[t]{llll}
+$\lceil \texttt{signal}\ Q \star \lambda x . T\rceil$ &=& $\lceil \texttt{signal } Q \rceil$;
+$x$ \texttt{:= r\_rsp;} $\lceil T \rceil$\\
+\\
+$\lceil \texttt{resume}\ x\ v\ \star \lambda x . T\rceil$ &=& $\lceil \texttt{resume } x\ v \rceil$;\\
+&&$x$.\texttt{call := r\_nxt}; $x$.\texttt{done := r\_done};\\
+&&$x$.\texttt{req := r\_req}; $x$.\texttt{val := r\_ret};\\
+&&$\lceil T \rceil$\\
+\\
+$\lceil T \star \lambda x . T\prime \rceil$ &=& $\lceil T \rceil$; $x$ \texttt{:= r\_ret}; $\lceil T\prime \rceil$\\
+\\
+$\lceil T \gg T\prime \rceil$ &=& $\lceil T \rceil$; $\lceil T\prime \rceil$\\
+
+$\lceil \eta\ X \rceil$ &=& \texttt{r\_ret :=} $\lceil X \rceil$\\
+$\lceil \texttt{rdEnv} \rceil$ &=& \texttt{r\_ret := r\_env}\\
+$\lceil \texttt{resume}\ x\ X\rceil$ &=& \texttt{r\_rsp := }$\lceil X \rceil$; \texttt{jsr} $x$;\\
+$\lceil \texttt{if } X \texttt{ then } T \texttt{ else } T\prime \rceil$ &=&
+\texttt{bz} $\lceil X \rceil$ \texttt{L}; $\lceil T \rceil$; \texttt{jmpi L'}; \texttt{L:} $\lceil T\prime \rceil$; \texttt{L': nop}\\
+\\
+$\lceil \texttt{fix} (\lambda k . T) \rceil$ &=& \texttt{jmpi L}; $k$: $\lceil T \rceil$; \texttt{return}; \texttt{L: jsri }$k$; \\
+
+$\lceil k\ x\rceil$ &=& \texttt{push} $vars(k)$; $param(k)$\texttt{:=} $\lceil x \rceil$;  \texttt{jsri }$k$; \texttt{pop} $vars(k)$; \\
+\\
+$\lceil \texttt{case } x \texttt{ of } A\rceil$ &=& $x\prime$ \texttt{:=} $\lceil x \rceil$; $\lceil A \rceil$\\
+
+$\lceil \texttt{rcase } x \texttt{ of } A\rceil$ &=& \texttt{push r\_ret}; \texttt{push r\_req};  \texttt{push r\_nxt};\\
+&&\texttt{jsr } $x$;\\
+&& $x\prime$\texttt{.val} \texttt{:= r\_ret}; $x\prime$ \texttt{.req} \texttt{:= r\_req}; $x\prime$ \texttt{.call := r\_nxt};\\
+&&\texttt{pop r\_nxt}; \texttt{pop r\_req}; \texttt{pop r\_ret};\\
+&&$\lceil A \rceil$\\
+\\
+$\lceil \texttt{P} (q, r) \rightarrow T \rceil$ &=& $q$ \texttt{:=} $x\prime$\texttt{.req}; $r$ \texttt{:=} $x\prime$\texttt{.call}; $\lceil T \rceil$\\
+
+$\lceil \texttt{D}\ v \rightarrow T \rceil$ &=& $v$ \texttt{:=} $x\prime$.\texttt{val}; $\lceil T \rceil$\\
+
+
+\end{tabular}
+
+
+
+\end{document}

@@ -1,0 +1,16 @@
+
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main = step inc >> step dec >> return ()
+
+step k = step_R k
+
+bind_k :: (K ()) -> (K ()) -> (K ())
+bind_k s t = s >> t
+
+inc = get G >>= \v -> put G (v + 1) >> return v
+
+dec = get G >>= \v -> put G (v - 1) >> return v

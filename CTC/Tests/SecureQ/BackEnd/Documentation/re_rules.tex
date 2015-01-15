@@ -1,0 +1,49 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+
+\begin{document}
+
+\section{Defunctionalizing Re}
+
+\subsection{Informal Semantics}
+
+Defunctionalization of actions in the reactive resumption is similar to the transformation for resumptions,
+except that signaling over input/output ports must be taken into account.  The reactive resumption monad includes a non-proper morphism, \textit{signalRe}, defined in Haskell as:\\
+
+$signalRe :: Req \longrightarrow Re \ Rsp\\
+\indent signalRe \ q = P \ (q, \ \eta_{K} \ \circ \eta_{Re})$\\
+
+\noindent In \textit{CT}, this standard definition is modified to take an additional argument specifying the port over which the request or response is transmitted.  \textit{CT} admits the declaration of input and output ports as part of the \textit{State} layer of the monad, using first class types \textit{InPort} and \textit{OutPort} respectively, so that we may define $signal$ as a \textit{CT} built-in thus:\\
+
+$type \ Port = InPort + OutPort$\\
+\indent$signal :: Port \longrightarrow Req \longrightarrow Re \ Rsp$\\
+
+\noindent where for any $port \in Port$, $signal \ port$ is semantically equivalent to an instance of $signalRe$ in which the underlying communication channel is taken to be $port$.
+
+\subsection{Defunctionalization Procedure}
+
+The preceding construction allows a definition of defunctionalization in the reactive resumption monad as:
+
+\begin{equation}
+{
+\lceil signal \ p \ q \rceil_{Re} \ = \ counter \star_{M} \ \lambda i \ . \ \eta_{M} ((i, \ putreq_{p} \ q) \mapsto (i + 1, \ getrsp_{p} \ q))
+}
+\end{equation}
+\\
+The defunctionalization transformation is identical to that for non-reactive resumptions for all terms typed in $Re$.\\
+
+The functions $putreq$ and $getrsp$ are intermediate representations of port behavior, with meaning determined by whether $p$ is an input or output port.  In the case that $p :: InPort$, the request $q$ is implicit so that $putreq \ q$ has no effect; $getrsp q$ has the effect of reading from $p$ a response of the form anticipated by $q$.  Conversely, in the case that $p :: OutPort$,  the response to $q$ is implied and $getrsp \ q$ has no effect,, while $putreq \ q$ writes signal $q$ to to the output port $p$.  These two functions then admit a straightforward translation into assignments in \textit{FSMLang} in which $putreq_{p}$ represents the appearance of $p$ on the left-hand side of an assignment, while $getrsp_{p}$ represents the appearance of $p$ on the right-hand side.\\
+
+The functions $putreq$ and $getrsp$ are represented as actions on the underlying state as:
+
+\begin{equation}
+\lceil putreq_{p} \ q\rceil_{K} = (x_{1}, ..., p, ..., x_{c}, v) \mapsto (x_{1}, ..., q, ..., x_{c}, v)
+\end{equation}
+when $p$ is an output port and
+\begin{equation}
+\lceil getrsp_{p} \ q \rceil_{K} = (x_{1}, ..., x_{c}, v) \mapsto (x_{1}, ..., x_{c}, read \ p)
+\end{equation}
+when $p$ is an input port.  Only one of the above transitions occurs as a result of an application of $signal$; which is determined by the type ($InPort$ or $OutPort$) of $p$.
+
+\end{document}

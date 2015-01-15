@@ -1,0 +1,219 @@
+\documentclass{beamer}
+
+\usepackage[utf8x]{inputenc}
+\usepackage{default}
+
+\usepackage{fancyvrb}
+
+\newcommand\codeHighlightRed[1]{\textcolor[rgb]{1,0,0}{\textbf{#1}}}
+\newcommand\codeHighlightBlue[1]{\textcolor[rgb]{0,0,1}{\textbf{#1}}}
+\newcommand\codeHighlightGreen[1]{\textcolor[rgb]{0.1,0.7,0.1}{\textbf{#1}}}
+\newcommand\codeHighlightViolet[1]{\textcolor[rgb]{0.6, 0, 0.6}{\textbf{#1}}}
+\newcommand\codeHighlightOrange[1]{\textcolor[rgb]{0.9, 0.3, 0}{\textbf{#1}}}
+
+\newcommand\vbind[0]{\codeHighlightGreen{>>=}}
+\newcommand\mret[0]{\codeHighlightGreen{return}}
+
+\newcommand\hlam[0]{\ensuremath{\backslash}}
+\newcommand\harr[0]{\codeHighlightOrange{->}}
+
+\title{Using the Reactive Monad to Specify Network Protocols: Research Questions}
+
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\maketitle
+
+\begin{frame}{Dear sirs,}
+
+\begin{structure}{Some observations:}
+\begin{itemize}
+
+\item{Principals in a network communication have separate, local behaviors that interact in a
+structured way that must satisfy some global behavior described by a network protocol.}
+
+ \item{The thread-handler relation used for kernels naturally generalizes to a method for relating
+local behaviors to global behaviors in a distributed system.}
+
+\item{There is some work on high-level, verifiable protocol specification languages
+(e.g. HLPSL by [Chevalier et al, 2004]), but not too much.}
+\end{itemize}
+\end{structure}
+
+\emph{\color{red}{Does specifying the roles of a protocol as different reactive monads offer some advantage
+in implementing or verifying protocols?}}
+
+
+\end{frame}
+
+
+\begin{frame}{Simple example: Narrative Spec}
+ 
+\begin{structure}{Client}
+
+\begin{itemize}
+ \item {Makes a time-stamped query;}
+ \item{Waits for a reply;}
+ \item{If fault or out-of-sequence reply, tries again.}
+\end{itemize}
+
+ 
+\end{structure}
+
+\begin{structure}{Server}
+
+\begin{itemize}
+\item{Listens for a query;}
+
+\item{If a query is heard and has the right stamp, send back a reply with a matching stamp;}
+
+\item{Otherwise, reply with 'fault'.}
+\end{itemize}
+
+\end{structure}
+
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Simple example: Monadic Spec}
+
+\begin{structure}{Client Implementation:}
+\begin{small}
+\begin{Verbatim}[commandchars=\\\{\}]
+client = query \codeHighlightGreen{>>=} \hlam p \harr
+         \codeHighlightRed{step_Re} (get) \codeHighlightGreen{>>=} \hlam n \harr
+         \codeHighlightBlue{if} (reply n p)
+         \codeHighlightBlue{then} (\mret p)
+         \codeHighlightBlue{else} (dountil (\hlam p \harr reply n p) retry)
+
+\end{Verbatim}
+\end{small}
+\end{structure}
+
+\begin{structure}{Server Implementation:}
+\begin{small}
+\begin{Verbatim}[commandchars=\\\{\}]
+server = listen \codeHighlightGreen{>>=} \hlam p \harr
+         \codeHighlightRed{step_Re} (get \vbind \hlam s \harr put (s + 1) >> \mret s) \hlam s \harr
+         (
+            \codeHighlightBlue{if} (stampof p) == (s + 1)
+            \codeHighlightBlue{then} send (Reply s)
+            \codeHighlightBlue{else} send Fault
+
+         ) \codeHighlightGreen{>>} server
+\end{Verbatim}
+\end{small}
+\end{structure}
+
+\end{frame}
+
+\begin{frame}[fragile]{Monads for Roles, Types for Role Relationships}
+
+\begin{structure}{States of the Channel}
+ \begin{Verbatim}[commandchars=\\\{\}]
+  \codeHighlightViolet{data} Event a = Msg a | Working | Listen
+
+  step_Re x =
+    P (Working, \hlam _ \harr x \vbind \hlam v \harr \mret (\mret v))
+ \end{Verbatim}
+
+\end{structure}
+
+
+\begin{structure}{Messages in Client-Server}
+
+ \begin{Verbatim}[commandchars=\\\{\}]
+  \codeHighlightViolet{data} Req = Query Int | Retry Int
+  \codeHighlightViolet{data} Rsp = Reply Int | Fault
+ \end{Verbatim}
+
+\end{structure}
+
+
+\begin{structure}{Roles in Client-Server}
+
+ \begin{Verbatim}[commandchars=\\\{\}]
+  \codeHighlightViolet{type} Role q p m a = ReactT (Event q) (Event p) m a
+  \codeHighlightViolet{type} Client a = Role Req Rsp (StateT Int Id) a
+  \codeHighlightViolet{type} Server a = Role Rsp Req (StateT Int Id) a
+ \end{Verbatim}
+
+\end{structure}
+
+\end{frame}
+
+\begin{frame}[fragile]{Using handlers to put together a global view}
+ 
+\begin{small}
+\begin{Verbatim}[commandchars=\\\{\}]
+ toplevel c s =
+   \codeHighlightBlue{case} c \codeHighlightBlue{of}
+     D _      \harr \mret ()
+     P (q, _) \harr \codeHighlightBlue{case} s \codeHighlightBlue{of}
+                   P (p, _)  \harr handle_c p c \vbind \hlam c' ->
+                                handle_s q s \vbind \hlam s' ->
+                                toplevel c' s'
+
+                   _         \harr toplevel c s
+\end{Verbatim}
+\end{small}
+
+\begin{structure}{What this specification says}
+ \begin{itemize}
+  \item {The client always acts first;}
+  \item {The session is over when the client is done;}
+  \item {Messages are assumed to be passed without external interference;}
+ \end{itemize}
+
+\end{structure}
+
+
+\end{frame}
+
+
+\begin{frame}[fragile]{Using handlers to express more varied behaviors}
+
+ \begin{small}
+\begin{Verbatim}[commandchars=\\\{\}]
+ toplevel c s =
+   \codeHighlightBlue{case} c \codeHighlightBlue{of}
+     D _      \harr \mret ()
+     P (q, _) \harr \codeHighlightBlue{case} s \codeHighlightBlue{of}
+                   P (p, _)  \harr \codeHighlightRed{attack p} \vbind \hlam p' \harr
+                                handle_c \codeHighlightRed{p'} c \vbind \hlam c' \harr
+                                handle_s q s \vbind \hlam s' \harr
+                                toplevel c' s'
+
+                   _         \harr toplevel c s
+\end{Verbatim}
+\end{small}
+
+\begin{structure}{Modeling vulernability in the global behavior}
+ \begin{itemize}
+  \item {Handler now states that the server's response \codeHighlightRed{p} can be modified in transit;}
+  \item {Modified message is passed to the client;}
+  \item {The handler now characterizes a set of traces with a specific vulnerability;}
+ \end{itemize}
+
+\end{structure}
+
+
+\end{frame}
+
+\begin{frame}{Summary: Future Questions}
+ \begin{itemize}
+  \item {Suppose all actions of type \texttt{\codeHighlightViolet{Role}} can be compiled into libraries implementing
+   the protocol; does their relationship to the hanlder offer a verification advantage?}
+
+  \item{The trace model exemplified above allows for stuttering; can this feature be used to
+  formally express timing, fairness and liveness conditions like susceptibility to DoS attacks?}
+ \end{itemize}
+
+\end{frame}
+
+
+
+
+\end{document}

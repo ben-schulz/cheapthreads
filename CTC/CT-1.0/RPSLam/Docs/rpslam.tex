@@ -1,0 +1,219 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{proof}
+
+\newcommand{\bind}[1]{\star_{#1}}
+\newcommand{\Y}[0]{\textbf{Y}}
+
+\title{A Trusted Computing Base for a Language with Security Types}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+An essential feature of secure programming is the assurance that information
+flow within a program obeys a well-defined policy. Past work in this area has
+shown that, while the security of information flow is undecidable in general,
+conformance with a given policy can be conservatively approximated by a
+decidable type system.  For security type inference to provide any meaningful
+assurance, however, it must take place in the setting of a trusted computing
+base that includes a trusted type inferencer, compiler, and runtime
+infrastructure.  We demonstrate the compilation of a call-by-value lambda
+calculus with security types, transform a monadic interpreter semantics for
+the source language into a trusted runtime system, and provide mechanically
+checked proofs that both trusted and untrusted code may run concurrently
+on this base without inducing insecure information flow.
+\end{abstract}
+
+\section{This paper and its points are old news!  Disregard everything below!}
+
+\section{Outline of (Candidate) Main Points}
+
+\begin{itemize}
+
+\item{Monadic style is favorable because it encourages modularity with respect to effects.  This modularity can be put to use by identifying the characteristic functions of an interpreter semantics, and transforming these step-wise into something with reified control flow.}
+
+\item{CPS is not "unreasonable in a formal sense" \cite{Thielecke_1999}, but does not behave as an exception or a GOTO.  This is evidenced by examples in which use a continuation twice.  There are simple ways to avoid this.}
+
+\item{How is CPS used in compilers, and how does it differ from the presented use of RPS?  Does a simpler notion of equality provide any better opportunities for optimization?}
+
+\item{RPS is like SSA \cite{Appel_1998}}
+
+\item{RPS allows equational reasoning}
+
+\item{When CPS is used, it is often restricted}
+
+	\begin{itemize}
+	\item{CPS induces elements of state, i.e. as in \cite{Thielecke_1999}; is this demonstrably different than RPS with state?}
+	\end{itemize}
+
+\end{itemize}
+
+\subsection{Questions to be addressed}
+
+\begin{itemize}
+
+\item{How do copyability and discardability \cite{Thielecke_1999} relate to RPS?}
+
+	\begin{itemize}
+	
+	\item{Is there a way to express copyability and discardability in terms of monadic projection?}
+	
+	\item{Do any special conditions regarding copyability/discardability hold in RPS?  Are there any other special conditions of interest?}
+	
+	\end{itemize}
+
+
+\item{Can RPS be characterized in terms of a linear type system as in \cite{Berdine_etal_2001}}
+
+\item{What notion(s) of equality are being used, and why?}
+
+\end{itemize}
+
+\section{An Untyped Lambda Calculus}
+
+\subsection{Source Language}
+
+\begin{tabular}[t]{lll}
+$M$ &$::=$& $V\ |\ (M\ M)$\\
+$V$ &$::=$& $C\ |\ x\ |\ (\lambda x . M)$\\
+$C$ &$::=$& $B\ |\ F$\\
+$B$ &$::= $& $\lceil n \rceil$\\
+$F$ &$::=$& $1+\ |\ 1-\ |\ ef\ |\ \Y$\\
+\end{tabular}
+
+\subsection{Operational Semantics}
+
+\begin{tabular}[t]{lll}
+$1+ \lceil n \rceil$ &$\longrightarrow$& $\lceil n + 1 \rceil$\\
+$1- \lceil n \rceil$ &$\longrightarrow$& $\lceil n - 1 \rceil$\\
+$ef\ \lceil n + 1 \rceil$ &$\longrightarrow$& $\lambda x. \lambda y. x$\\
+$ef\ \lceil 0 \rceil$ &$\longrightarrow$& $\lambda x. \lambda y. y$\\
+$(\lambda x . M)\ V$ &$\longrightarrow$& $M[x \mapsto V]$\\
+$\Y\ V$ &$\longrightarrow$& $\lambda x . V\ (\Y\ V)\ x$\\
+
+
+\end{tabular}
+
+\subsection{An Evaluator}
+
+Fix this evaluator; it has several mistakes.\\
+
+\begin{tabular}[t]{lll}
+$eval\ \rho\ ((\lambda x . T)\ T\prime)$ &$=$& $eval\ \rho[x \mapsto T\prime]\ T$\\
+$eval\ \rho\ (x\ T\prime)$ &$=$& $eval\ \rho\ (\rho(x)\ T\prime)$\\
+\\
+$eval\ \rho\ (+1\ \lceil n \rceil)$ &$=$& $eval\ \rho\ \lceil n + 1 \rceil$\\
+$eval\ \rho\ (-1\ \lceil n \rceil)$ &$=$& $eval\ \rho\ \lceil n - 1 \rceil$\\
+$eval\ \rho\ (ef \lceil n + 1 \rceil)$ &$=$& $eval\ \rho\ (\lambda x . \lambda y. x)$\\
+$eval\ \rho\ (ef \lceil 0 \rceil)$ &$=$& $eval\ \rho\ (\lambda x . \lambda y. y)$\\
+$eval\ \rho\ (\Y\ T)$ &$=$& $eval\ \rho\ (\lambda x . T\ (\Y\ T)\ x)$\\
+\\
+$eval\ \rho\ x$ &$=$& $\rho(x)$\\
+$eval\ \rho\ \lceil n \rceil$ &$=$& $ n $\\
+
+\end{tabular}
+
+\section{RPS on the Evaluator}
+
+\subsection{The Identity Monad}
+
+Show that this correctly implements the functional interpreter, and that projection out of the Identity monad gives the same result as the pure interpreter.  This is trivial, but needs mention.\\
+\\
+Cite Wadler.  Briefly mention the virtues of monadic style.
+
+\begin{tabular}[t]{lll}
+$eval\ \rho\ (T\ T\prime)$ &$=$& $eval\ \rho\ T\prime \bind{Id} \lambda v\prime.$\\
+&&$eval\ \rho\ T \bind{Id} \lambda v.$\\
+&&$apply\ v\ v\prime$\\
+\\
+$eval\ \rho\ (\lambda x. T)$ &$=$& $\eta\ (Cl\ x\ \rho\ T)$\\
+\\
+$eval\ \rho\ (ef\ T)$ &$=$& $eval\ \rho\ T\ \bind{Id} \lambda n.$\\
+&&$if (Num\ 0) == n\ then\ eval\ \rho\ (\lambda x . \lambda y . y)\ else\ eval\ \rho\ (\lambda x . \lambda y. x)$\\
+\\
+$eval\ \rho\ (\Y\ T)$ &$=$& $\eta\ (Cl\ x\ \rho\ (T\ (\Y\ T)))$\\
+\\
+$eval\ \rho\ (+1\ T)$ &$=$& $eval\ \rho\ T\ \bind{Id} \lambda n.$\\
+&&$\eta\ (Num\ (n + 1))$\\
+\\
+$eval\ \rho\ (-1\ T)$ &$=$& $eval\ \rho\ T\ \bind{Id} \lambda n.$\\
+&&$\eta\ (Num\ (n - 1))$\\
+\\
+$eval\ \rho\ n$ &$=$& $\eta\ (Num\ n)$\\
+\\
+$eval\ \rho\ x$ &$=$& $\eta\ (\rho\ x)$\\
+
+\end{tabular}
+\\
+It might be worthwhile to make note of the fact that the evaluator will return 'Wrong' for all ill-typed terms.  This could save some complaining about type systems, without the need to really deal with them.\\
+
+\subsection{Lifting into the Environment Monad}
+
+Cite Liang.  Present the environment axioms.  Show that they hold in the environment monad, as defined.  Present the interpreter.  Explain how it implements the fundamental operations of the lambda calculus.
+
+\begin{tabular}[t]{lll}
+
+
+
+\end{tabular}
+
+\subsection{Lifting into the Resumption Monad}
+
+Lift the environment interpreter into the resumption monad.  Cite Harrison, et al.  Cite Filinski.  Show that this lifting does not disturb the environment axioms.  The resumption monad materializes control flow.  This is important, because it sets the stage for the next phase of the compilation, and bypasses the need for continuations.
+
+Mention that there is no satisfactory lifting of the environment monad in the continuation monad.  Contrast this to the fact that we can lift through the resumption monad.  Show the proofs.
+
+Hey.  Isn't it neat that both the identity monad and the resumption monad have projections that are distributive with respect to bind?  Is there some other property contingent on distributivity with respect to bind?
+
+\section{RPS on the Source language}
+
+The preceding interpreters showed that a lambda term can be transformed into a term in the resumption monad.\\
+
+Show that there is a transformation of the source language into the reactive resumption monad such that the resulting term can be interpreted in a way that preserves the environment axioms.\\
+
+Show that observational equivalence is preserved.
+
+\subsection{Kernelizing the Implementation: Replacing Environment by Reactivity}
+
+The next step is to replace environment functionality with reactive signaling.  This is the characteristic handler, as in "Cheap (but functional) Threads" (citation missing!).  The handler is characteristic in the sense that it specifies the way in which terms are actually evaluated or run.\\
+
+Here's the key: each of the environment-level (or lower) operations that was part of the source term in the lifted interpreter is replaced by a reactive signal action that prompts the corresponding action in the handler.  This cleanly separates the source term from its evaluator, and provides a framework for compilation.
+
+\subsection{Final RPS Transformation: Production of a Flat RPS Term (?)}
+
+Is this possible, or does it amount to full-on simulation with no guarantee of termination?
+
+Hypothetically, this is done simply by applying the handler in the preceding to the transformed source term.
+
+But it may not be possible; I suspect this won't terminate.  I'm leaving the speculation here for the moment anyway.
+
+\subsection{Further Compilation: Adding Effects to the Handler}
+
+Perhaps instead of plugging in bells and whistles, e.g. garbage collection, we should just go straight-on compilation, i.e. add state, and then transform that sh*t into a three-address code, or at least a C-like sub-intermediate form.
+
+\section{CPS and its problems}
+
+\subsection{Definitions}
+
+\begin{tabular}[t]{lll}
+$\pi_{C} $&$=$&$ \lambda (C\ x).x$\\
+$\eta_{C}\ v $&$=$&$ C (\lambda k . k\ v)$\\
+$(C\ \phi) \star_{C} f $&$=$&$ C (\lambda k . \phi\ (\lambda a .\pi_{C}\ (f\ a)\ k))$\\
+\end{tabular}
+
+
+\subsection{No distributivity}
+
+\subsection{No lifting of the Environment monad}
+
+
+%
+% bibliography:
+%
+\bibliographystyle{plain}
+\bibliography{rpslam}
+
+\end{document}

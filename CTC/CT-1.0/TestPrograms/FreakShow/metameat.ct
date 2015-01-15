@@ -1,0 +1,53 @@
+
+
+monad K = StateT(ShellCode) G
+
+monad R = ResT K
+
+monad Re = ReactT Q K
+
+signal Q = (Cont, Ack (R ()))
+         | (Exec ShellCode, Nil)  -- 'exec(1)'
+
+--
+-- data-as-code, stashed away somewhere:
+--
+data ShellCode = KERPOW (R ())
+
+
+
+thread :: (Re ())
+thread = signal Cont >>= \ack ->
+         case ack of
+
+           -- request to run the code kicked back from the handler:
+           (Ack echo) -> signal (Exec (KERPOW echo)) >> return ()
+         
+
+--
+-- the handler reproduces code in response to the user thread:
+--
+handle :: (Re ()) -> (R (Re ()))
+handle re = case re of
+              (D v)                       -> return (return v)
+
+              -- tell the thread to run itself again, from the beginning:
+              (P (Cont, r))               -> step_R (r (Ack main))
+
+              (P (Exec (KERPOW code), r)) -> code >> step_R (r Nil)
+
+
+--
+-- keep running that thread:
+--
+main :: (R ())
+main =
+  (fix (\k -> \nothing ->
+
+    handle thread >>
+    k ()
+
+  )) ()
+
+    
+

@@ -1,0 +1,63 @@
+--
+-- this is ~/cheapthreads/CTC/CT-1.0/RPSLam/rps.log.tx
+--
+-- development log for the RPS demonstration compiler
+--
+-- put here (2011.01.12) (picking up somewhere several weeks in)
+--
+-- Schulz
+--
+
+
+---------------------------------------------------------------------- 
+-- 2011.01.12
+---------------------------------------------------------------------- 
+
+The term portion of the compiler is fine, but several weeks of up-to-my-elbows
+debugging, with some proress but no end yet in sight has made it painfully
+clear that the handler portion of the compiler is a total cluster-fuck disaster.
+
+For starters, here is a list of changes to make to the existing code, that
+should hopefully simplify things:
+
+  + parser and source syntax:
+
+    - reactive resumptions are, in reality, pointers, and their dereferences
+      need to be made explicit in both the concrete and the abstract syntax
+      (unless we want to bring a type inferencer into the mix)
+
+  + target syntax:
+
+    - clear out all the redundant structures indicating resumptions;
+      these will no longer be needed;
+
+    - get rid of requests as a separate production; these should be made
+      into ordinary constructor expressions;
+
+  + module 'HCompile' and 'CodeGen':
+
+    - get rid of all special-case productions for pattern-testing;
+
+    - compile requests to ordinary constructor expressions;
+
+  + interpreter:
+
+    - redo it, with emphasis on a cleaner structure;
+
+
+---------------------------------------------------------------------- 
+-- 2011.01.13
+---------------------------------------------------------------------- 
+
+Implemented yesterday's list;
+
+Traced problems in the execution of the output code to the fact that
+not all relevant references are being pushed when recursive calls occur;
+this results in inconsistent variable contents on return within the handler,
+and ultimately leads to a number of control flow problems.
+
+Fixing this by pushing all assigned variables on recursive call, and popping
+them at the top of the fixpoint.
+
+
+-- THIS IS THE END OF THE FILE --

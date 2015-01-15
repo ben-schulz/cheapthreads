@@ -1,0 +1,286 @@
+
+\documentclass{beamer}
+
+\usepackage[utf8x]{inputenc}
+\usepackage{default}
+\usepackage{amsmath}
+\usepackage{graphics}
+
+\newcommand{\compile}[1]{\ensuremath{\lceil #1 \rceil}}
+\newcommand{\ptransform}[1]{\ensuremath{\lfloor #1 \rfloor}}
+
+\title{Relativisitic Program Complexity as a Measure of Assurance}
+\subtitle{Directions for Research}
+
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\maketitle{}
+
+\begin{frame}{What is Relativistic Program Complexity?}
+
+\begin{itemize}
+
+\item{
+ Any formal language may be thought of as a \emph{code} in the sense of
+ classical information theory.
+}
+
+\item{
+ Two languages may include implementations of the same computable function,
+ but one may require a \emph{relatively more complex} string in order to
+ describe the function.
+}
+
+\item{
+ \emph{Relativistic program complexity} is a measure of
+ the difference in relative information between two different implementations
+ of the same computable function.
+}
+
+
+\end{itemize}
+
+\end{frame}
+
+%%% slide 2
+\begin{frame}{Foundation: The Fundamental Inequality for Compilation}
+
+\structure{Defining Compilation in Terms of Relativistic Complexity}
+{
+\\
+Let $p$ denote some program in a formal language $L$, and let\\
+\compile{-} : $L \rightarrow L\prime$
+denote a semantics-preserving transformation to some other language $L\prime$.
+Then \compile{-} is a \emph{compilation} if and only if\\
+\[
+\indent \forall p\ .\ H(p) \le H(\compile p) + O(1)
+\]
+}
+
+\structure{Intuition}
+{
+\\
+Anything justifiably called a compiler takes an abstract, high-level
+description of some computable function and transforms it into a
+relatively low-level description with lots of concrete details.
+}
+
+\end{frame}
+
+%%% frame 3
+\begin{frame}{Relativistic Complexity Defined}
+
+\structure{Starting Intuition: Absolute Complexity
+}
+{
+\\
+Given a particular universal computer $U$, the $complexity$ of a string $s$,
+written $H(s)$
+is the length of the shortest string $s^*$ such that $U(s^*, \epsilon) = s$.\\
+(\textit{A Theory of Program Size Formally Identical to Information Theory},
+\textbf{Chaitin 1975})
+
+}
+
+
+\medskip
+
+\medskip
+
+\structure{New Definition: Relativistic Complexity}
+{\\
+Let $G$ be a context-free grammar describing language $L$.
+The \emph{relativistic complexity} of a program $p \in L$, written $H(p)$ is
+the number of vertices in the abstract syntax tree describing $p$ in $G$.
+}
+
+\medskip
+
+\color{red}{The difference: absolute complexity fixes the code and varies the
+program, relativistic complexity fixes the program and varies the code!}
+
+\end{frame}
+
+%%%% frame 5
+
+\begin{frame}{Example: Compiling Untyped Lambda Calculus to CPS}
+
+\begin{structure}{Grammar for ULC}
+\begin{tabular}[t]{lll}
+$M$ &::=& $x\ \vert\ M\ M\ \vert\ \lambda x . M$\\
+\end{tabular}
+\end{structure}
+
+\begin{structure}{Grammar for CPS}
+\begin{tabular}[t]{lll}
+$S$ &::=& $C\ T \vert T\ T\ C$\\
+$T$ &::=& $x\ \vert \lambda x . \lambda k . S$\\
+$C$ &::=& $k\ \vert \lambda x . s$\\
+\end{tabular}
+\end{structure}
+
+
+\begin{structure}{The CPS Transform}
+\\
+\begin{tabular}[t]{lll}
+$\overline{x}$ &=& $\lambda k . k\ x$\\
+
+$\overline{\lambda x . M}$ &=& $\lambda k .
+ k\ (\lambda x . \lambda k\prime . \overline{M}\ k\prime)$\\
+
+$\overline{M\ N}$ &=& $\lambda k. \overline{M}\
+ (\lambda m . \overline{N} (\lambda n . m\ n\ k))$\\
+
+\end{tabular}
+
+\end{structure}
+
+\medskip
+\begin{structure}{Example Compilation}
+
+$\overline{(\lambda x . x)\ y}$ =\\
+$\lambda k . ((\lambda k\prime. (k\prime (\lambda x . (\lambda k\prime\prime .
+ (k\prime\prime\ x))))) (\lambda m . ((\lambda k\prime\prime\prime .
+ (k\prime\prime\prime\ y)) (\lambda n .
+ ((m\ n)\ k)))))$
+\end{structure}
+
+\begin{structure}{Quick Complexity Analysis}
+\\
+$H((\lambda x. x) y) \le H(\overline{(\lambda x . x) y}) + 0$ pretty obviously
+
+\end{structure}
+
+\end{frame}
+
+%%% frame 5
+
+\begin{frame}{Why the Fundamental Inequality of Compilation Matters}
+
+\structure{Question}
+{\\
+  Let $\phi$ be some proposition about $p \in L$, and let $H(\phi)$ denote
+  the complexity of $\phi$ according to some measure satisfying at least
+  the Kraft inequality.  Let \ptransform{-} be some function transforming
+  propositions on $L$ into propositions on some other language $L\prime$.
+  \textbf{What is the relation between $H(\phi)$ and $H(\ptransform{\phi})$?}
+}
+
+\bigskip
+
+\structure{Answer?}{\\
+  $H(p) \le H(\compile{p}) + O(1)$ should imply that
+  $H(\phi) \le H(\ptransform{\phi}) + O(1)$, since $\phi$ must reference $p$!
+}
+
+\bigskip
+
+\structure{So ...}{\\
+  $H(\phi) \le H(\ptransform{\phi}) + O(1)$, but how much more?
+}
+
+\end{frame}
+
+%%%% frame 7
+
+\begin{frame}{Examples of Propositional Complexity Growth}
+
+\structure{Ideal Model-Driven Implementation}
+{
+ \[ H(\phi) + O(1) = H(\ptransform{\phi}) \]\\
+ i.e. compilation should weaken propositions only enough to add some information
+ about concrete details that are independent of the input program itself
+}
+\medskip
+
+\structure{Untrusted Code in a Trusted Kernel}
+{
+ \[ O(\sigma)H(\phi) + O(1) = H(\ptransform{\phi}) \]\\
+ where $s$ is the number of system calls, since system calls must be
+ assumed to be constructed in a ``safe'' way.
+}
+
+\medskip
+
+\structure{Trusted Code in an Untrusted Kernel}
+{
+ \[ O(\omega)H(\phi) + O(1) = H(\ptransform{\phi}) \]\\
+ where $\omega$ is a very large factor describing every possible
+ behavior of the untrusted kernel
+\emph{because the kernel can always subvert the correct operation of the
+  host program}
+}
+
+
+\end{frame}
+
+%%%% frame 8
+
+\begin{frame}{Why Complexity of Propositions Matters}
+
+\begin{itemize}
+
+ \item{
+  Given a theory of a source $L$ and a theory of a target $L\prime$, it should
+  be possible to construct \ptransform{-}, providing insight into how
+  robust or fragile program properties remain under compilation
+  $L \rightarrow L\prime$ which clearly depends upon the choices of $L$,
+  $L\prime$.
+ }
+
+ \item{
+  Vulnerability to fault and exploit should correspond exactly to those cases
+  in which either $F$ or $G$ is non-constant in
+  \[ F * H(\phi) + G = H(\ptransform{\phi}) \]
+ }
+
+\item{\emph{Right now, we have no formal measure of the assurance provided by
+ any method of verification!}}
+
+\end{itemize}
+
+\end{frame}
+
+%%%% frame 9
+\begin{frame}{Next Steps, More Questions}
+
+\begin{itemize}
+
+ \item{Construct an example in full detail (obviously)}
+
+ \item{Characterize the functions \ptransform{-}; does such a function
+ ever exist for all possible propositions about a program, or only some?
+ What classes exist within the universe of such proposition transformers?}
+
+ \item{Introduce \emph{noise} into the channel i.e. the compiler; this
+ should correspond to compiler bugs or mistakes in semantic specification}
+
+ \item{Determine the necessary conditions (read: bounds) for compiler
+ correctness in the presence of noise.  Is there such a thing as an acceptable
+ amount of error?}
+
+ \item{Given a compiler,
+  is it possible to place an asymptotic bound on the number of compiled
+  programs that may be vulnerable to fault or exploit?}
+
+\end{itemize}
+
+\end{frame}
+
+%%% last frame
+\begin{frame}{Thanks!}
+
+
+\begin{figure}[htb]
+\centerline{
+\includegraphics[10cm, 10cm]{edmgoodsir.jpg}
+}
+\end{figure}
+
+
+
+\end{frame}
+
+\end{document}

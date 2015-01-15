@@ -1,0 +1,114 @@
+--
+-- this is ~/cheapthreads/ctc/tests/secureq/backend/backend.log.txt
+--
+-- a log of notes and observations pertinent to the PEIP backend
+--
+-- put here 2009.11.30
+--
+-- Schulz
+--
+
+
+----------------------------------------------------------------------
+-- 2009.11.30
+----------------------------------------------------------------------
+
+Work begun formulating Jason's back-end code into CT; this has been done
+in a way that attempts to minimize the need to add to the defunctionalizer
+(in its state of development as of this writing) or the basic CT language.
+
+All global variables are believed to have been identified and given
+components in the K-monad.  An outline of 'main' has been written, as well
+as the function that initializes the global data structure ('back_end_status')
+representing the state of the system.
+
+Arrays require some suitable treatment, since Jason's code (as would normally
+be expected) passes around pointers and make use of offsets relative to these.
+
+According to documentation for the Xilinx EDK (9.2i), 'ngetfsl', 'getfsl',
+'nputfsl' and 'putfsl' have been deprecated, though these are used by Jason's
+code, via respective C macros (in './comm_lib.h').  This may not be important
+to our purposes but is worth noting.
+
+Currently devising some way to faithfully represent FSL read-writes; these
+have a representation in FSMLang, but need a representation in CT.  Ideally,
+there is some way to do this with simple, non-reactive resumptions, but 
+reactive resumptions may be required.
+
+----------------------------------------------------------------------
+-- 2009.12.01
+----------------------------------------------------------------------
+
+Ports need to be handled.  In well-formed FSMLang examples, ports appear
+to be accessible in the same way as any other FSM signal once declared.
+This suggests adding an 'InPort' and an 'OutPort' type and using these
+as elements of the state.  However, these are not true state elements;
+'StateT(InPort)' should admit only 'get' operations, and 'StateT(OutPort)'
+should admit only 'put' operations.
+
+Noticed a MicroBlaze behavior alluded to in Jason's code ('begin_dma_transfer'
+in './dma.h') that may be difficult to adequately express in CT; in particular,
+it appears that a particular assignment (which may be a write-out to a port)
+automatically begins a transfer via the DMA device.  It is unclear at present
+what aspects of this event need to be expressed, and how.
+
+Also noticed what appears to be a stub in Jason's code in 'backend.h';
+this is in function 'background_processing()'; the stub is indicated by a
+comment: "FIXME: PEIP emulation" on a portion of the code that checks
+to see if there has been a reply on a used channel.  Jason's code presently
+appears to assume that there is always a reply if the '_CHANNEL_USED' flag
+is set.  However, similar code appears in a loop immediatley below, so
+it is unclear if the marked code is simply vestigial.
+
+Need to find out how a PEIP 'response' is different from a PEIP 'reply'.
+
+Presently assuming that PEIP is some external device that is or has a memory
+that the various 'address' components of the 'peip_interface' structure
+reference.  However, these values appear to come from "outside", and so
+it may not be possible to declare the PEIP as an ordinary memory.
+Further study needed.
+
+LATER: PEIP is a dual-port memory wherein (presumably) the other port connects
+to some other device providing input to the back-end.  Thus, we should be
+able to treat the PEIP is an ordinary memory and assume that its contents
+are produced by write-outs from some other device.
+
+----------------------------------------------------------------------
+-- 2009.12.16
+----------------------------------------------------------------------
+
+Need to see to it that 'external' keyword gets added to shared memories
+at compile-time.
+
+Need to figure out how a 'response' is different from a 'reply'.
+
+Need to verify that all effective ports in Jason's source code  are
+accounted-for.
+
+Need to work out a sensible representation of queues.  Ideally, CT would
+allow us to do this as in the original code, where we simply have a 'queue'
+type that admits standard 'enqueue' and 'dequeue' operations.  This can
+be simulated by having a fixed-size memory holding the queue elements
+and simply copying new data into the next available space in the queue.
+This is a slight deviation from the original code, in which a new queue item
+is created in-place and enqueued as a pointer.
+
+----------------------------------------------------------------------
+-- 2009.12.17
+----------------------------------------------------------------------
+
+Figured out a simple queue implementation using the constructs available
+in CT as-is, although this construct may admit the possibility of
+overflow of the addresses.  Don't know if this needs to be explicitly
+addressed, or if the addresses can just be expected to wrap around, given that
+the queue does not grow too quickly.
+
+----------------------------------------------------------------------
+-- 2009.12.21
+----------------------------------------------------------------------
+
+DMA transfers happen automatically, as soon as the length register is
+set to a non-zero value.  According to the manual, the number in this
+register is steadily decremented as bytes of the transfer are performed.
+As such, the appropriate DMA transfer components of the state need to
+declared in a way that they are somehow immediately available to the DMA unit.

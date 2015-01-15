@@ -1,0 +1,23 @@
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+
+main = return () >>=
+       loop_R
+       (\x ->
+
+         -- it turns out there is no life or death for resumptions
+         r >>
+
+         -- since the evaluation of this 'case' will depend solely on
+         -- the definitve binding of 'r', and is not affected by 
+         -- the preceding line
+         case r of
+           (Done _)  -> break ()
+           (Pause _) -> r
+
+         -- This means, among other things, that resumptions are not threads.
+
+       )

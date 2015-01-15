@@ -1,0 +1,10 @@
+
+
+monad K = StateT(Int) G
+
+monad R = ResT K
+
+main = step_R (put G 0 >> inc >> inc) >>= \v ->
+       if (0 == v) then return True else return False
+
+inc = get G >>= \v -> put G (v + 1) >> return v

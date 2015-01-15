@@ -1,0 +1,248 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{proof}
+
+\newcommand{\forget}[1]{}
+
+\newcommand{\throw}[0]{\textsf{throw}}
+\newcommand{\catch}[0]{\textsf{catch}}
+\newcommand{\sloop}[0]{\textsf{loop}}
+\newcommand{\sbreak}[0]{\textsf{break}}
+\newcommand{\ifz}[0]{\textsf{ifzero}}
+\newcommand{\jsr}[0]{\textsf{jsr}}
+\newcommand{\rtid}[0]{\textsf{r$_{tid}$}}
+\newcommand{\rparent}[0]{\textsf{r$_{parent}$}}
+\newcommand{\rpc}[0]{\textsf{r$_{pc}$}}
+\newcommand{\switcha}[0]{\textsf{switch}_{A}}
+\newcommand{\switchz}[0]{\textsf{switch}_{Z}}
+\newcommand{\kcreate}[0]{ \textsf{tcreate}$_{kernel}$}
+\newcommand{\ucreate}[0]{  \textsf{tcreate}$_{user}$}
+
+
+
+\title{Compiling CT to OESS}
+\author{Schulz}
+
+\begin{document}
+
+\maketitle
+
+\section{Operational Execution-Stream Semantics (OESS)}
+
+The Operational Execution-Stream Semantics (OESS) is designed as an operationalization of the denotational notion of "stream" essential to Cheapthreads (CT).  At its top level, an OESS program specifies a stream of execution for a series of atomic actions, together with basic control-flow primitives.  This is supplemented by some number of declared user- or kernel-level threads, together with some number of declared blocks of stored imperative code.\\
+
+\subsection{OESS Syntax}
+
+Syntax of an OESS program consists of blocks with the following structure:\\
+
+%begin syntax figure:
+
+\begin{tabular}{cc}
+{
+\begin{minipage}[t]{2.15in}
+$
+\begin{array}[t]{lcl}
+
+S &::=& A \ \textsf{;} \ S \\
+  & \mid & \textsf {ifzero} \ S \ S \ S\\
+  & \mid & \textsf {jsr} \ L \ S\\
+  & \mid & \textsf {loop} \ S \ S\\
+  & \mid & \textsf {done} \ X\\
+  \\
+A &::=& \textsf {atom(} K \textsf {)}\\
+  &\mid & \textsf{tcreate}_{kernel} \ S\\
+  &\mid & \textsf{tcreate}_{user} \ T\\
+  &\mid & \textsf{kill} \ X\\
+  &\mid & \textsf{catch} \ X \ L\\
+  &\mid & \textsf{switch}_{A} \ X\\
+  &\mid & \textsf{switch}_{Z} \ X\\
+  &\mid & \textsf{break}\\
+  \\
+T &::=& \textsf{cont(} K\textsf{);} \ T \\
+  &\mid & \textsf{throw(} X\textsf{);} \ T \\
+  &\mid & \textsf {ifzero} \ T \ T \ T\\
+  &\mid & \textsf {jsr} \ L \ T\\
+  & \mid & \textsf {loop} \ T \ T\\
+  & \mid & \textsf {done} \ X\\
+
+\end{array}
+$
+\end{minipage}
+}
+
+{
+\begin{minipage}[t]{2.15in}
+$
+\begin{array}[t]{lcl}
+  M &::=& R \ \textsf{:=} \ X\ \mid \ \textsf{tst} \ X\ \mid \  \textsf{nop}\\
+  K &::=& M\textsf{;}K \ \mid \ \ifz \ K \ K \ K \\
+      &\mid& \jsr \ L \ K \mid M\\
+\\
+X &::=& R\\
+  & \mid & L\\
+  & \mid & \textsf{-}X\\
+  & \mid & X \ \textsf{+} \ X \ \mid X \ \textsf{-} \ X\\
+  & \mid & X \ \textsf{*} \ X \ \mid X \ \textsf{/} \ X\\
+  & \mid & \textsf{!}X\\
+  & \mid & X \ \textsf{\&\&} \ X \ \mid \ X \ \textsf{$\mid \mid$} \ X\\
+  & \mid & Int\\
+  & \mid & \textsf{nil}\\
+  \\
+R &::=& Var\\
+  & \mid & Var \textsf{[}X\textsf{]}\\
+  & \mid & \textsf{r$_{ret}$}\ \mid  \textsf{r$_{pc}$}
+  \mid \  \textsf{r$_{signal}$}\  \mid  \textsf{r$_{tct}$} \mid  \textsf{r$_{Z}$}\\
+  \\
+  L &::=& Label\\
+\end{array}
+$
+\end{minipage}
+}
+\\
+\end{tabular}
+
+% end syntax table
+A program, as output by the compiler is a collection of labeled blocks of one of $S$, $T$ or $K$.  $S$ specifies a global view of execution stream behavior and represents the top- or kernel-level view of system execution, expressed as a sequence of atomic, terminating actions.  $T$ specifies the execution stream of a user-level thread having the same basic structure as a kernel execution stream, but with fewer privileges.  A stream in $T$ may also make a system call (\throw), which may be handled by the enclosing kernel execution stream (\catch).  The $main$ function declared in the CT source, which must satisfy $main \ :: \ R \ ()$, is taken to specify the global-view behavior of the program's execution stream, and is compiled to a block in $S$ which becomes the entry point of the program.
+
+\subsection{OESS Semantics}
+
+The OESS operational semantics is expressible in terms of transition of a CHEAP abstract machine, consisting of a context $C$, a heap of code blocks $H$, an active execution stream $E$, a stack of suspended execution-abstractions $A$, and a thread-pool $P$.  $P$ is a collection of syntactic productions in $T$ or $S$ (see above), indexed by unique identifiers.  $E$ is one of the elements of $P$, and corresponds to the currently active execution stream.  $A$ is properly a stack of \emph{resumptions}, that is, points at which temporarily suspended executions should resume.
+
+A thread is referenced by a control block $<n, C, E, A>$ consisting of a unique identifier $n$, a local register context $C$, an execution stream $E$, and a resumption context $A$.  $E$ specifies the stored program corresponding to the instructions of the thread; execution begins with the first atom in $E$.
+
+In this section, and those below, we assume that the sequencing operation, i.e. '\textsf{;}' is associative.  In fact, this is necessary if the monadic semantics of CT are to be preserved.  The atoms comprising the execution streams in $E$ are treated as residing in well-defined locations in $H$, and each execution is taken to update the thread-local program counter \textsf{r$_{pc}$} with the location of the next atom in sequence, as:
+
+\begin{displaymath}
+\infer[(thread-update)]
+{(C, H, E, A, P) \rightarrow (C, H, E, A, P[<n, C\prime[\rpc \mapsto l], E\prime, A\prime>])}
+{H(l) = E, \ C(\rtid) = n}
+\\
+\end{displaymath}
+\\
+
+CHEAP postulates that this transition occurs before all transitions below, i.e. so that the thread-local program counter is updated before the execution of each atom.
+
+\subsubsection{Top-Level Kernel Semantics}
+
+OESS has constrained control flow behaviors which preclude non-local jumps and enforce the requirement that all branches have a well-defined confluence point.  Control flow primitives are common to both user ($T$) and kernel ($S$) execution streams, and the control flow primitives of these have identical semantics.
+
+
+Control flow within an execution stream is summarized in the transition rules below:
+
+   %'loop' rule:
+    \begin{displaymath}
+   \infer[(loop)]
+    {(C, H, \sloop \ E \ E\prime, A, P) \rightarrow (C, H, E, \sloop \ E \ E\prime :: A, P)}
+    {}
+     \\
+   \end{displaymath}
+   
+  % 'break' rule:
+
+   \begin{displaymath}
+   \infer[(break)]
+    {(C, H, \sbreak; E, \sloop \ E\prime \ E\prime\prime :: A, P) \rightarrow (C, H, E\prime\prime, A, P)}
+    {}
+     \\
+   \end{displaymath}
+
+      \begin{displaymath}
+   \infer[(break-NOP)]
+    {(C, H, \sbreak; E, A, P) \rightarrow (C, H, E, A, P)}
+    {}
+     \\
+   \end{displaymath}
+   
+   %branch-on-zero:
+      \begin{displaymath}
+   \infer[(branch \ on \ zero-true)]
+    {(C, H, \ifz \ E \ E\prime \ E\prime\prime, A, P) \rightarrow (C, H, E; E\prime\prime, A, P)}
+    {C(r_{Z}) \ne 0}
+     \\
+   \end{displaymath}
+   
+   \begin{displaymath}
+   \infer[(branch \ on \ zero-false)]
+    {(C, H, \ifz \ E \ E\prime \ E\prime\prime, A, P) \rightarrow (C, H, E\prime; E\prime\prime, A, P)}
+    {C(r_{Z}) = 0}
+     \\
+   \end{displaymath}
+   
+   % jump to subroutine:
+      \begin{displaymath}
+   \infer[(jump \ to \ subroutine)]
+    {(C, H, \jsr \ l; \ E, A, P) \rightarrow (C[\textsf{r$_{pc}$} \mapsto l], H, E\prime, E :: A, P)}
+    {H(l) = E\prime}
+     \\
+   \end{displaymath}
+   
+   % halt inside a loop
+    \begin{displaymath}
+    \infer[(thread \ exit)]
+    {(C, H, \textsf{done} \ v, E::A, P) \rightarrow (C[\textsf{r$_{ret}$} \mapsto v, \textsf{r$_{pc}$} \mapsto l, ], H, E, A, P)}
+    {H(l) = E}
+\\ 
+\end{displaymath}
+
+
+    % halt otherwise
+    \begin{displaymath}
+    \infer[(system \ halt)]
+    {(C, H, \textsf{done} \ v, \textsf{nil}, P) \rightarrow (C[\textsf{r$_{ret}$} \mapsto v], H, \textsf{done} \ v, \textsf{nil}, P)}
+    {}
+\\ 
+\end{displaymath}
+
+Rule $(thread \ exit)$ uses \textsf{done}, which is the only terminal in $S$, to demarcate execution streams from one another.  Together with $(loop)$, this rule induces simple tail-recursive semantics for \sloop, as well as the usual semantics for subroutine calls.
+
+The top-level (kernel) stream may also switch context to any execution stream active in $P$.    This has the effect of restoring register values and memory maps.
+
+%context switching rules:
+\begin{displaymath}
+\infer[(unconditional \ switch)]
+   {(C, H, \switcha \ t; \ E, A, P) \rightarrow (C\prime[\rparent \mapsto n, \rtid \mapsto n\prime], H, E\prime, A\prime, P)}
+   {P(t) = <n\prime, C\prime, E\prime, A\prime> \ , \ C(\rtid) = n}
+   \end{displaymath}
+   
+      \begin{displaymath}
+\infer[(conditional \ switch \ true)]
+   {(C, H, T, \switchz \ t; \ E, A, P) \rightarrow (C\prime[\rparent \mapsto n, \rtid \mapsto n\prime], H, E\prime, A, P)}
+   {C(r_{Z}) = 1, \ P(t) = <n\prime, C\prime, E\prime> \ , \ C(\rtid) = n}
+   \end{displaymath}
+   
+   \begin{displaymath}
+\infer[(conditional \ switch \ false)]
+   {(C, H, \switchz \ t; \ E, A, P) \rightarrow (C, H, E, A, P)}
+   {C(r_{Z}) = 0}
+   \end{displaymath}
+   
+   A new thread is created through a call to \kcreate \ or \ucreate; \kcreate \ initializes a context with kernel permissions, while \ucreate \ does so without kernel permissions; the distinction determines whether the resulting stream is a syntactic production of $S$ or $T$.  Threads may be created only from labeled blocks in $H$, as:\\
+   
+   \begin{displaymath}
+\infer[(kernel \ thread \ create)]
+   {(C, H, $\kcreate$ \ l \ n; \ E, A, P) \rightarrow (C, H, E, A, \ <n, C, E\prime>::P)}
+   {H(l) = E\prime}
+   \end{displaymath} 
+   
+      \begin{displaymath}
+\infer[(user\ thread \ create)]
+   {(C, H, $\ucreate$ \ l \ n; \ E, A, P) \rightarrow (C, H, E, A, <n, \lbrace r_{pc} \mapsto l, \  r_{signal} \mapsto \textsf{nil}\rbrace, E\prime>::P)}
+   {H(l) = E\prime}
+   \end{displaymath} 
+
+A kernel 'thread' is not a thread in the usual sense.  A kernel thread has a context containing a program counter that is independent of the enveloping execution stream, and retains variables local to invocations of imperative code (i.e. productions of $K$).  However, a kernel thread shares its context with the execution stream in which it is invoked; the so-called thread then behaves as a sort of macro for kernel execution, the actions for which may be inspected and operated upon.
+% Are changes to the context-instance in the kernel reflected in the context instance of the new thread?
+A user 'thread' is more properly a thread; it creates an instance of the block with label $l$, together with a context containing an initialized program counter and signal register.
+
+A system call by a user thread is handled by an invocation of \catch, which specifies the thread to handle as well as the location of the handler to use, as:
+
+\begin{displaymath}
+\infer[(catch)]
+{(C, H, \catch \ t \ l; E, A, P) \rightarrow (C, H, H(l); \textsf{atom} (t (\textsf{r$_{signal}$}) := \textsf{r$_{ret}$}); E, A, P)}
+{}
+\\
+\end{displaymath}
+
+
+\end{document}

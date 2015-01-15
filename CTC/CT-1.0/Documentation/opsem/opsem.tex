@@ -1,0 +1,270 @@
+
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{proof}
+\usepackage{semantic}
+
+\newcommand{\sem}[1]{|[ #1 |]}
+\newcommand{\trans}[1]{\Longrightarrow_{#1}}
+\newcommand{\state}[1]{\langle #1 \rangle}
+\newcommand{\compile}[2]{\lceil #2 \rceil_{#1}}
+\newcommand{\atom}[1]{\texttt{atom\{ #1 \}}}
+\newcommand{\throw}[1]{\texttt{throw\{ #1 \}}}
+\newcommand{\nullbind}[0]{\gg}
+\newcommand{\bottom}[0]{\perp}
+
+\newcommand{\forget}[1]{}
+
+\title{Oh snap, son!  It's an OPSEM for RSI!}
+
+
+\begin{document}
+
+\maketitle
+
+\section{Definition of the Abstract Machine}
+
+	The RSI abstract machine has five types of states:
+	
+\begin{itemize}
+
+\item{Top-level control: \[ \state{\kappa, \state{\rho, \theta, \iota, \sigma, \epsilon}}_M \]}
+
+\item{Stream sequencing: \[ \state{C, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R\]}
+
+\item{Stream action:} \[ \state{A, \rho, \theta, \state{\kappa, \iota, \sigma, \epsilon}}_A \]
+
+\item{Imperative sequencing: \[  \state{S, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K \]}
+
+\item{Imperative action: \[ \state{U, \rho, S, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_V \]}
+
+
+\end{itemize}
+
+Where:
+
+\begin{itemize}
+\item{$\kappa$ denotes a location label;}
+\item{$\rho$ is the environment of variable bindings;}
+\item{$\theta$ is the asynchronous request mask bit;}
+\item{$\iota$ is the interrupt mask bit;}
+\item{$\sigma$ is the loop-exit stack;}
+\item{$\epsilon$ is the caller stack;}
+\end{itemize}
+
+\section{Transition Rules}
+
+\subsection{Initial}
+%%%% initial
+\[
+  \infer[(init)]{\state{\mu(C), \state{\rho_{init}, 1, 1, \emptyset, \emptyset}}_M}{\state{C, \mu}_{init}}
+\]
+\\
+
+\subsection{Top-Level Control}
+%%%% fetch-execute rule
+\[
+  \infer[(fetch-exec)]{\state{\mu(\kappa), \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}{\state{\kappa, \state{\rho, \theta, \iota, \sigma, \epsilon}}_M}
+\]
+\\
+
+\subsection{Atomic Actions}
+%%%% atom rule:
+
+\[
+  \infer[(atom)]{\state{S, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}{\state{\texttt{atom \{}S\texttt{\}}, \rho, \theta, \state{\kappa, \iota, \sigma, \epsilon}}_A}
+\]
+\\
+
+%%%% throw rule:
+\[
+  \infer[(throw)]{\state{S, \rho, \state{\kappa, 0, 1, \sigma, \epsilon}}_K}{\state{\texttt{throw \{}S\texttt{\}}, \rho, 1, \state{\kappa, \iota, \sigma, \epsilon}}_A}
+\]
+\\
+
+\[
+  \infer[(throw-mask)]{\state{\kappa, \state{\rho, 1, \iota, \sigma, \epsilon}}_M}{\state{\texttt{throw \{}S\texttt{\}}, \rho, 0, \state{\kappa, \iota, \sigma, \epsilon}}_A}
+\]
+
+\subsection{Stream Execution}
+%%%% sequence rule:
+\[
+  \infer[(seq)]{\state{C, \rho, \theta, \state{\mu(T), \iota, \sigma, \epsilon}}_A}{\state{C\texttt{;}T, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}
+\]
+
+%%%%% branch-on-zero:
+\[
+  \infer[(branch:\ zero)]{\state{C\prime\texttt{; }T, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}{\state{\texttt{bz } 0\ C\ C\prime\ T, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}
+\]
+\\
+\[
+  \infer[(branch:\ non-zero)]{\state{C\texttt{; }T, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}{\state{\texttt{bz } 1\ C\ C\prime\ T, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}
+\]
+\\
+
+%%%% loop
+\[
+  \infer[(loop\ entry)]{\state{C, \state{\rho, \theta, \iota, (\mu(C) :: \sigma), (\mu(C\prime) :: \epsilon)}}_R}{\state{\texttt{loop }C\ C\prime, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}
+\]
+\\
+
+\[
+  \infer[(loop\ iteration)]{\state{\kappa, \state{\rho, \theta, \iota, (\kappa :: \sigma), \epsilon}}_M}{\state{\texttt{done}, \state{\rho, \theta, \iota, (\kappa :: \sigma), \epsilon}}_R}
+\]
+
+%%%% break
+\[
+  \infer[(loop\ exit)]{\state{\kappa, \state{\rho[\texttt{ret} \mapsto eval(\rho, v)], \theta, \iota, \sigma, \epsilon}}_M}{\state{\texttt{break }v, \state{\rho, \theta, \iota, (\kappa :: \sigma), \epsilon}}_R}
+\]
+\\
+
+%%%% switch-R
+\[
+  \infer[(non-reactive\ switch)]{\state{\rho(X), \state{\rho, \theta, 1, \sigma, (\mu(T) :: \epsilon)}}_M}{\state{\texttt{swr } X\ T, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}
+\]
+
+%%%% switch-T
+\[
+  \infer[(reactive\ switch)]{\state{\rho(X), \state{\rho, \theta, 0, \sigma, (\mu(T) :: \epsilon)}}_M}{\state{\texttt{swt } X\ T, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}
+\]
+
+%%%% response-catch
+\[
+  \infer[(response\ catch)]{\state{C, \state{\rho[X \mapsto \rho(\texttt{rsp})], \theta, \iota, \sigma, \epsilon}}_R}{\state{\texttt{catch } X\ C, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}
+\]
+
+
+%%%% non-local jump
+\[
+  \infer[(jump)]{\state{\rho(X), \state{\rho, \theta, \iota, \sigma, \epsilon}}_M}{\state{\texttt{jmp } X, \state{\rho, \theta, \iota, \sigma, \epsilon}}_R}
+\]
+\\
+
+%%%% return to caller
+\[
+  \infer[(call-back)]{\state{\kappa, \state{\rho, \theta, \iota, \sigma, \epsilon}}_M}{\state{\texttt{halt}, \state{\rho, \theta, \iota, \sigma, (\kappa :: \epsilon)}}_R}
+\]
+
+%%%% system exit
+\[
+  \infer[(system\ exit)]{\state{}_{final}}{\state{\texttt{halt}, \state{\rho, \theta, \iota, \emptyset, \emptyset}}_R}
+\]
+
+\subsection{Imperative Sequencing}
+
+\[
+  \infer[(imperative\ sequencing)]{\state{A, \rho, S, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_V}{\state{A\texttt{;}S, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}
+\]
+\\
+
+\[
+  \infer[(local\ branch: zero)]{\state{S\prime, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}{\state{\texttt{bz }0\ S\ S\prime, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}
+\]
+\\
+
+\[
+  \infer[(local\ branch: non-zero)]{\state{S, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}{\state{\texttt{bz }1\ S\ S\prime, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}
+\]
+\\
+
+\[
+  \infer[(action\ terminate)]{\state{\kappa, \state{\rho, \theta, \iota, \sigma, \epsilon}}_M}{\state{\texttt{end}, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}
+\]
+
+\subsection{Imperative Actions}
+
+%%%% assignment
+
+\[
+  \infer[(assignment)]{\state{S, \rho[X \mapsto eval(\rho, v)], \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}{\state{X \texttt{:= } v, \rho, S, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_V}
+\]
+\\
+
+
+%%%% clear
+
+\[
+  \infer[(variable\ clear)]{\state{S, \rho[X \mapsto \bottom], \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}{\state{\texttt{clr } X, \rho, S, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_V}
+\]
+\\
+
+%%%% nop
+
+\[
+  \infer[(nop)]{\state{S, \rho, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_K}{\state{\texttt{nop}, \rho, S, \state{\kappa, \theta, \iota, \sigma, \epsilon}}_V}
+\]
+
+
+
+
+% all of the remainder is old news:
+%
+% (2010.10.05) Schulz
+%
+
+\forget{
+
+\section{Control Flow}
+\begin{tabular}[t]{llll}
+
+
+
+$\sem{ L\texttt{: atom\{}k\} }$ &=& $\state{L, \rho, 0, \sigma, \epsilon} \trans{K} \sem{k} \trans{R} \state{L, \rho\prime, 1, \sigma, \epsilon}$\\
+
+$\sem{ L\texttt{: throw\{}k\} }$ &=& $\state{L, \rho, 0, (L\prime :: \sigma), \epsilon} \trans{K} \sem{k} \trans{R} \state{L\prime, \rho, 0, \sigma, \epsilon}$\\
+\\
+$\sem{A\texttt{; }C}$ &=& $\sem{\texttt{A}} \trans{R} \sem{\texttt{C}}$\\
+\\
+$\sem{L\texttt{: bz}\ x\ T\ F\texttt{; }C}$ &=&
+$
+\begin{cases}
+
+\state{L, \rho, \iota, \sigma, \epsilon} \trans{R} \sem{F} \trans{R} \sem{C}\ ,\ eval(\rho, x) = 0\\
+\state{L, \rho, \iota, \sigma, \epsilon} \trans{R} \sem{T} \trans{R} \sem{C}\ ,\ otherwise\\
+
+\end{cases}
+$ \\
+\\
+$\sem{L\texttt{: loop }R\texttt{; }C}$ &=& $\state{L, \rho, \iota, \sigma, (\mu(C) :: \epsilon)} \trans{R} \sem{R} \trans{R} \state{\mu(R), \rho\prime, \iota\prime, \sigma\prime, \epsilon\prime}$\\
+
+$\sem{L\texttt{: break}\ x}$ &=& $\state{L, \rho, \iota, \sigma, (L\prime :: \epsilon)} \trans{R} \state{L\prime, \rho[ret \mapsto eval(\rho, x)], \iota, \sigma, \epsilon}$\\
+
+$\sem{L\texttt{: swr }x\texttt{; }C}$ &=& $\state{L, \rho, \iota, \sigma, \epsilon} \trans{R} \state{\mu(eval(\rho, x)), \rho, \iota, (\mu(C) :: \sigma), \epsilon}$\\
+
+$\sem{L\texttt{: swt }x\texttt{; }C}$ &=& $\state{L, \rho, \iota, \sigma, \epsilon} \trans{R} \state{\mu(eval(\rho, x)), \rho, 1, (\mu(C) :: \sigma), \epsilon}$\\
+
+$\sem{L\texttt{: jmp }x}$ &=& $\state{L, \rho, \iota, \sigma, \epsilon} \trans{R} \state{\mu(eval(\rho, x)), \iota, \sigma, \epsilon}$\\
+
+$\sem{L\texttt{: halt}}$ &=& $\state{L, \rho, \iota, \sigma, \epsilon} \trans{final} done$\\
+
+\end{tabular}
+
+\section{State Actions}
+
+\begin{tabular}[t]{llll}
+
+$\sem{S\texttt{; }S\prime}$ &=& $\sem{S} \trans{K} \sem{S\prime}$\\
+
+$\sem{\texttt{bz}\ x\ T\ F\texttt{; }S}$ &=&
+$
+\begin{cases}
+
+\state{\kappa, \rho, \iota, \sigma, \epsilon} \trans{K} \sem{F} \trans{K} \sem{S}\ ,\ eval(\rho, x) = 0\\
+\state{\kappa, \rho, \iota, \sigma, \epsilon} \trans{K} \sem{T} \trans{K} \sem{S}\ ,\ otherwise\\
+
+\end{cases}
+$ \\
+\\
+$\sem{g \texttt{ := }x}$ &=& $\state{\kappa, \rho, \iota, \sigma, \epsilon} \trans{K} \state{\kappa, \rho[g \mapsto eval(\rho, x)], \iota, \sigma, \epsilon}$\\
+\\
+$\sem{\texttt{clr } g}$ &=& $\state{\kappa, \rho, \iota, \sigma, \epsilon}, \trans{K} \state{\kappa, \rho[g \mapsto \bottom], \iota, \sigma, \epsilon}$\\
+\\
+$\sem{\texttt{nop}}$ &=& $\state{\kappa, \rho, \iota, \sigma, \epsilon} \trans{K} \state{\kappa, \rho, \iota, \sigma, \epsilon}$\\
+
+\end{tabular}
+
+} % end forget
+
+
+\end{document}

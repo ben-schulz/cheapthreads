@@ -1,0 +1,22 @@
+--
+-- no problems here!
+--
+
+monad K = StateT(Int) G
+monad R = ResT K
+
+actionA :: (K ())
+actionA = get G >>= \ g -> put G (g+1)
+
+actionB :: (K ())
+actionB = get G >>= \ g -> put G (g-1)
+
+
+
+main :: (R ())
+main =
+       ((loop_R (\x ->
+            step_R (put G (fst x) >> actionA >> get G) >>= \a ->
+            step_R (put G (snd x) >> actionB >> get G) >>= \b ->
+            return (a, b)
+       )) (0, 0)) >> return ()

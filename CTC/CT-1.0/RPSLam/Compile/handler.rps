@@ -1,0 +1,55 @@
+(fix
+  (\h -> \s ->
+
+    {
+    case* s of
+
+      (P (MkCl x phi, r))    ->
+
+        rdEnv >>= \rho ->
+        resume r (Cl x rho phi) >>= \t ->
+        h t
+
+      (P (MkRecCl x phi, r)) ->
+
+        rdEnv >>= \rho ->
+        inEnv (xEnv rho x (RecCl x rho phi)) (h phi) >>= \v -> 
+        resume r v >>= \t -> 
+        h t
+
+
+      (P (Apply (Cl x rho phi) v, r)) ->
+
+        inEnv (xEnv rho x v) (h phi) >>= \u ->
+        resume r u >>= \t ->
+        h t
+
+      (P (Apply _ v, r)) ->
+
+        resume r Wrong >>= \t -> h t
+
+      (P (Lkp x, r)) ->
+
+        rdEnv >>= \rho ->
+        lkp x >>= \v ->
+        {
+
+          case v of
+            (RecCl x rho' phi) ->
+
+              inEnv (xEnv rho' x (RecCl x rho phi)) (h phi) >>= \v ->
+              resume r v >>= \t ->
+              h t
+
+            v  ->
+
+              resume r v >>= \t -> h t
+
+        }
+
+      (D v) ->
+
+        return v
+
+    }
+  )) main

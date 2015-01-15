@@ -1,0 +1,66 @@
+
+
+union Tree{
+
+  tuple (union Tree) (union Tree) branch;
+  int leaf;
+
+}
+
+int main(Tree tree){
+
+  atom(G = 0;);
+
+  atom(push tree t;); -- push the value of 'tree' onto the stack for 't';
+
+  /* fixpoint: */
+  K:
+  loop{
+
+    /* make the pattern bindings: */
+
+    atom(t0 = pop t);
+
+    if(isBranch t0){
+
+      atom(
+        r = t0.branch.fst;
+        l = t0.branch.snd;
+      );
+
+      /* first call to 'k': */
+      atom(push r t;);
+      jsr K;
+
+      /* lambda binding: */
+      atom(n = ret;);
+
+      /* second call to 'k': */
+      atom(push l t;);
+      jsr K;
+      
+      /* lambda binding: */
+      atom(m = ret);
+
+      /* assignment to 'G': */
+
+      atom(G = n + m;);
+      atom(ret = n + m);
+      rts;
+
+    }
+
+    /* second 'case' alternative: */
+    else{
+      v = (top t).leaf;
+      ret = v;
+      rts;
+    }
+
+
+  } /* end fix */
+
+
+  ret = ret;
+
+} /* end main */

@@ -1,0 +1,45 @@
+monad R = ResT K + StateT(Bit) Deq + StateT(Bit) Enq + StateT(Bit) Busy + StateT(Bit) Empty + StateT(Bit) Full + StateT(Addr) HeadPtr + StateT(Addr) TailPtr + StateT(Data) Output + StateT(Data) LocalData + StateT(Memory) Mem
+
+{-
+-- FSM SIGNAL DEFINITIONS - name, type
+SIGS:
+local_data, std_logic_vector(0 to DATA_WIDTH-1);
+empty, std_logic;
+full, std_logic;
+busy, std_logic;
+output, std_logic_vector(0 to DATA_WIDTH-1);
+head_ptr, std_logic_vector(0 to ADDR_WIDTH-1);
+tail_ptr, std_logic_vector(0 to ADDR_WIDTH-1);
+-}
+
+-- Using Int to model bitstrings is admittedly only approximate.
+type Addr   = Int
+type Data   = Int
+type Memory = Addr -> Data
+
+data Bit        = Zero | One deriving Eq
+data BitString  = BS [Bit]
+
+showBit Zero = '0'
+showBit One  = '1'
+
+instance Show Bit where
+    show Zero = "0"
+    show One  = "1"
+
+addr_width, data_width :: Int
+addr_width = 2 ^ 9
+data_width = 2 ^ 8
+
+all_zeros, all_ones :: Addr
+all_zeros  = 0
+all_ones   = addr_width - 1
+
+{-
+GENERICS:
+ADDR_WIDTH, integer, 9;
+DATA_WIDTH, integer, 8;
+
+MEMS:
+mem, DATA_WIDTH, ADDR_WIDTH;
+-}

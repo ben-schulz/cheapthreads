@@ -1,0 +1,67 @@
+
+
+monad K = StateT(Int) G
+        + StateT(Res) T
+
+monad R = ResT K
+
+data Res = Res (R ())
+
+main :: (R ()) -> (R ())
+main phi =
+
+  ((fix (\k -> \r ->
+
+    if (isDone r)
+    then r
+    else
+
+      -- get next thread action
+      step_R (ctail r) >>= \r_next ->
+
+      -- take the next action, put it into 'T' with the rest of the thread:
+      step_R (get T >>= \r_pile -> put T (threadcat (Res r_next) r_pile)) >>
+
+      (k r_next)
+
+  )) phi) >>
+
+  -- run your thread backward, execute instructions from the devil:
+  step_R(get T) >>= \r ->
+  unwrap r
+
+
+--
+-- you know ...
+--
+isDone x =
+  case x of
+    (Done _)  -> True
+    (Pause _) -> False
+
+--
+-- wrapped-thread concatenation:
+--
+threadcat :: Res -> Res -> Res
+threadcat r1 r2 = 
+  case (r1, r2) of
+    (Res r1, Res r2) -> Res (r1 >> r2)
+
+
+--
+-- unwrap and go:
+--
+unwrap :: Res -> (R ())
+unwrap r =
+  case r of
+    (Res r) -> r
+
+
+--
+-- essentially, make a pointer to the remainder of 'r':
+--
+ctail :: (R ()) -> (K (R ()))
+ctail r =
+  case r of
+    (Pause x) -> x
+    (Done _)  -> return r

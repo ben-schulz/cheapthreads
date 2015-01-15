@@ -1,0 +1,64 @@
+--
+-- this is ~/cheapthreads/CTC/CT-1.0/TestPrograms/producer.ct
+--
+-- the producer half to a simple producer-consumer example
+--
+
+
+-- a simple queue:
+monad K = StateT (Int) QHead +
+          StateT (Int) QTail +
+          StateT (Int) QLength
+          MemT 128 (Int) MsgQ
+
+-- signal for requesting the next message:
+signal Q = (Read, Msg Int)
+
+-- perform the operation in this reactive framework:
+monad Re = ReactT Q K
+
+
+main :: (Re ())
+main =
+
+  -- initialize the queue:
+  step_Re( put QHead 0 >> put QTail 0 >> put QLength 0 >> return ()) >>
+
+  -- indefinitely consume messages:
+  (
+    fix
+    (\k -> \nothing ->
+
+      -- check whether the queue is full:
+      step_Re(
+
+        get QLength >>= \len ->
+        return (if len == 128 then True else False)
+
+      ) >>= \full ->
+
+      -- if the queue isn't full, read the next message
+      -- and put it into the queue for handling:
+      if (not full)
+      then
+        signal Read >>= \msg ->
+        enqueue msg >>
+        k ()
+      else
+        k ()
+    )
+
+  ) ()
+
+
+
+enqueue n =
+
+  -- queue-state components are assigned concurrently:
+  step_Re(
+    get QTail >>= \t ->
+    put MsgQ[t] n >>
+    put QTail (if t < 128 then t + 1 else 0) >>
+    get QLength >>= \l ->
+    put QLength (l + 1)
+  )

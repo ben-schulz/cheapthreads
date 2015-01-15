@@ -1,0 +1,15 @@
+
+(u a ->
+  \x -> \y ->
+    if (zero? x)
+    then
+      (1+ y)
+    else
+      (if (zero? y)
+      then
+        (a (1- x) 1)
+      else
+        (a (1- x) (a x (1- y)))
+      )
+
+) 3 2

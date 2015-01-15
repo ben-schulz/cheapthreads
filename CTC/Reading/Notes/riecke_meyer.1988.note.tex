@@ -1,0 +1,337 @@
+\documentclass[a4paper,10pt]{article}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{proof}
+\usepackage{semantic}
+
+%opening
+\title{Reading Notes: "Continuations May Be Unreasonable", Meyer and Riecke (1988)}
+\author{Benjamin Schulz}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+
+\end{abstract}
+
+\section{Overview}
+
+\begin{itemize}
+ \item{Applying the continuation-passing (CPS) transform to a term in the untyped lambda calculus may break observational congruence;}
+\item{Introduction of a call/cc operator may also break congruence;}
+\item{This complicates reasoning (but does not render it completely impossible: see ``Reasoning with Continuations: Full Abstraction for Models of Control'' by Sitaram and Felleisen [1990])}
+\end{itemize}
+
+\section{Initial Definitions and Notations}
+
+The paper deals with a simply typed call-by-value (CBV) $\lambda$-calculus with arithmetic and recursion.  Let $Eval_v(M)$ denote the term produced by evaluating $M$ according to the appropriate operational semantics.  Let $\lambda_v \vdash M = N$ denote \emph{lambda convertability}, when $M$ reduces to $N$ under the usual procedures of $\lambda_v$.  Let $\overline{M}$ denote the CPS transform of $M$.\\
+Informally, CPS preserves $\lambda_v \vdash M = N$, as well as the observable ``final output'' of evaluation.  (This is stated more precisely in a later section.)\\
+\emph{The thesis of this paper is not that the CPS transform is incorrect.}\\
+\\
+\textbf{Definition:} Two terms $M$ and $N$ are \emph{observationally congruent}, denoted by $M \equiv_v N$ if they have the same behavior in all complete contexts under $\lambda_v$ convertability.\\
+\\
+To recapitulate: $\lambda_v$ convertibility holds only when $M$ reduces to $N$ through some number of reduction steps; observational equivalence holds only when $M$ and $N$ are interchangeable in all complete program contexts.\\
+\\
+\subsection{Example}
+Consider the following terms:\\
+\begin{equation}
+ M_1 = \lambda a . \lambda b . \lambda c . (\lambda x . (b\ a)\ x)\ (c\ a)\\
+\end{equation}
+and
+\begin{equation}
+ M_2 = \lambda a . \lambda b . \lambda c .(b\ a)\ (c\ a)\\
+\end{equation}
+
+These two terms are not $\lambda_v$ convertible, although they are observationally congruent in all contexts under CBV.  $\lambda_v$ convertibility fails because of the CBV evaluation strategy, which will prevent the $\beta$-reduction of the body of $M_1$ which would otherwise result in a term identical to $M_2$.
+
+These two terms are also inequivalent under CPS.  Consider the following evaluation context:
+
+\begin{equation}
+   \mathcal{C}[\bullet]= [ \bullet ] 1 (\lambda x . \Omega) (\lambda y . 
+\mathcal{C}(\lambda x . 1))
+\end{equation}
+
+Recall that $\Omega \equiv (\textbf{Y} (\lambda f . \lambda x . f\ x))$, where $\textbf{Y} \equiv
+ \lambda f . (\lambda x . f\ (x\ x)) (\lambda x . f\ (x\ x))$; $\mathcal{C}$ denotes the
+call-with-current-continuation operator, with the standard reductions:
+
+\begin{eqnarray}
+(\mathcal{C} M)N \rightarrow \mathcal{C}\lambda k . M(\lambda f . \lambda k . (f N))\\
+%
+M(\mathcal{C} N) \rightarrow \mathcal{C} \lambda k . N (\lambda v . k (M v))\\
+%
+\mathcal{C}M \rhd M (\lambda x. \mathcal{A} x)\\
+\end{eqnarray}
+
+The CBV evaluation of $M_1$ gives:\\
+
+\begin{eqnarray}
+ (\lambda a . \lambda b . \lambda c . (\lambda x . (b\ a)\ x)\ (c\ a))\ 
+1\ (\lambda x . \Omega)\ (\lambda y . \mathcal{C}(\lambda x . 1)) \rightarrow\\
+% 
+(\lambda b . \lambda c . (\lambda x . (b\ 1)\ x)\ (c\ 1))\ 
+(\lambda x . \Omega)\ (\lambda y . \mathcal{C}(\lambda x . 1)) \rightarrow\\
+%
+(\lambda c . (\lambda x . ((\lambda x . \Omega)\ 1)\ x)\ (c\ 1))\ 
+(\lambda y . \mathcal{C}(\lambda x . 1)) \rightarrow \\
+%
+((\lambda x . ((\lambda x . \Omega)\ 1)\ x)\ ((\lambda y . \mathcal{C} (\lambda x . 1))\ 1))\rightarrow\\
+%
+(\lambda x. ((\lambda x . \Omega)\ 1)\ x)\ ((\lambda y . \mathcal{C} (\lambda x . 1))\ 1)\rightarrow\\
+%
+(\lambda x. ((\lambda x . \Omega)\ 1)\ x)\ (\mathcal{C} (\lambda x . 1)) \rightarrow\\
+%
+\mathcal{C} \lambda k . (\lambda x . 1) (\lambda v . k\ (\lambda x. ((\lambda x . \Omega)\ 1)\ x)\ v))
+%
+\end{eqnarray}
+\\
+A CBV evaluation of $M_2$ gives:\\
+
+\begin{eqnarray}
+%
+(\lambda a . \lambda b . \lambda c . (b\ a)\ (c\ a))\ 1\ (\lambda x . \Omega)\ (\lambda y .
+\mathcal{C} (\lambda x . 1)) \rightarrow\\
+%
+(\lambda b . \lambda c . (b\ 1)\ (c\ 1))\ (\lambda x . \Omega)\ (\lambda y .
+\mathcal{C} (\lambda x . 1)) \rightarrow \\
+%
+(\lambda c . ((\lambda x . \Omega)\ 1)\ (c\ 1))\ (\lambda y .
+\mathcal{C} (\lambda x . 1)) \rightarrow \\
+%
+((\lambda x . \Omega)\ 1)\ ((\lambda y .
+\mathcal{C} (\lambda x . 1))\ 1) \rightarrow \\
+%
+((\lambda x . \Omega)\ 1)\ 
+(\mathcal{C} (\lambda x . 1)) \rightarrow \\
+%
+\Omega\ 
+(\mathcal{C} (\lambda x . 1)) \rightarrow \\
+%
+\mathcal{C} \lambda k . (\lambda x . 1)\ (\lambda v . k\ (\Omega\ v))
+\end{eqnarray}
+\\
+Choosing an initial continuation to instantiate $k$ easily shows from here that $M_2$ will diverge,
+since $\Omega$ will eventually be evaluated as an argument, whereas $M_1$ will not diverge, since
+$\Omega$ is contained in the body of an abstraction that will not be evaluated.\\
+
+It is important to note that the context that distinguishes these two terms involves the $\mathcal{C}$
+operator, suggesting that it is the addition of continuations to the language that induces
+the inequivalence.\\
+\\
+\textbf{Exercise:} Show that $\equiv_c\ \subset\ \equiv_v$.\\
+\\
+Note that there are other $M$ and $N$ for which $\lambda_v \vdash M = N$ and $\lambda_c \vdash M = N$.
+Consider the following:\\
+
+\begin{eqnarray}
+ P_1 = \lambda a . \lambda b . (\lambda x . x) ((\lambda y . y) (a\ b))\\
+%
+P_2 = \lambda a . \lambda b . (\lambda x . x) (a\ b)
+\end{eqnarray}
+
+The CPS transforms are:\\
+\\
+$
+ \overline{P_1} =\\
+\lambda k . k\ (\lambda a . \lambda k\prime .
+k\prime (\lambda b . \overline{(\lambda x . x) ((\lambda y . y) (a\ b))})) =\\
+%
+$
+\\
+$\lambda k . k\ (\lambda a . \lambda k\prime .
+k\prime (\lambda b .
+\lambda k\prime\prime . \overline{(\lambda x . x)} (\lambda m .
+\overline{((\lambda y . y) (a\ b))} (\lambda n . m n k\prime\prime))) =\\
+$
+%
+\\
+$\lambda k . k\ (\lambda a . \lambda k\prime .
+k\prime (\lambda b .
+\lambda k\prime\prime . (\lambda k\prime\prime\prime . 
+\lambda k\prime\prime\prime (\lambda x . (\lambda k\prime\prime\prime\prime . k\prime\prime\prime\prime x)))\\
+\indent (\lambda m .
+(\lambda l . l (\overline{(\lambda y . y)} (\lambda m\prime . \overline{(a\ b)}
+(\lambda n\prime . m\prime n\prime l))))
+(\lambda n . m n k\prime\prime))) =\\
+$
+%
+\\
+$
+\lambda k . k\ (\lambda a . \lambda k\prime .
+k\prime (\lambda b .
+\lambda k\prime\prime . (\lambda k\prime\prime\prime . 
+\lambda k\prime\prime\prime (\lambda x . (\lambda k\prime\prime\prime\prime . k\prime\prime\prime\prime x)))\\
+\indent (\lambda m .
+(\lambda l . l (\lambda l\prime . l\prime (\lambda y . (\lambda l\prime . l\prime y))
+(\lambda m\prime . \lambda l\prime\prime . (\lambda k . k a)\\
+\indent \indent (\lambda m\prime\prime . 
+(\lambda k . k b) (\lambda n\prime\prime . m\prime\prime n\prime\prime l\prime\prime)
+(\lambda n\prime . m\prime n\prime l))))
+(\lambda n . m n k\prime\prime))) =\\
+$
+\\
+and:\\
+\\
+$
+\overline{P_2} =
+$
+\\
+$
+\lambda k . k (\lambda a . (\lambda k\prime . k\prime (\lambda b . \overline{(\lambda x . x) (a\ b)})))
+=
+$
+\\
+$
+\lambda k . k (\lambda a . (\lambda k\prime . k\prime (\lambda b .
+(\lambda k\prime\prime . \overline{(\lambda x . x)} (\lambda m . \overline{(a\ b)}
+(\lambda n . m n k\prime\prime))))
+=
+$
+\\
+$
+\lambda k . k (\lambda a . (\lambda k\prime . k\prime (\lambda b .
+(\lambda k\prime\prime . \\
+\indent (\lambda l . l (\lambda x . (\lambda k . k x))) 
+(\lambda m . (\lambda l\prime . (\lambda k . k a) (\lambda m\prime . (\lambda k . k b))
+(\lambda n\prime . m\prime n\prime l\prime))
+(\lambda n . m n k\prime\prime))))
+$
+\\
+The following conjecture is offered:\\
+\\
+\textbf{Conjecture:} For some direct semantics $D |[ \bullet |] $, continuation semantics
+$C |[ \bullet |]$, continuation transform $\overline{M}$ and observational congruence relation
+$\equiv_c$ that uses a call/cc operator in contexts, then:\\
+
+\[
+\overline{M} \equiv_v \overline{N}\\
+\iff D|[ \overline{M} |] = D|[ \overline{N} |]\\
+\iff C|[ M |] = C |[ N |]\\
+\iff M \equiv_C N
+\]
+\\
+This conjecture is verified in ``Reasoning with Continuations II: Full Abstraction for Models of Control''
+by Sitaram and Felleisen (1990).\\
+
+The consequences of this result are important, as it demonstrates that observational congruence
+in $\lambda_v$ of the image of terms under the continuation transform exactly coincides with
+the observational equivalence relation in $\lambda_c$.  Moreover, the continuation semantics of $M$
+corresponds to the denotation of the continuation transform of $M$.\\
+
+\section{Details of the Continuation Transform}
+
+The basic CPS transform on the core lambda calculus is:
+
+\begin{tabular}[t]{lll}
+ $\overline{x}$ &=& $\lambda k . k\ x$\\
+$\overline{\lambda x . M}$ &=& $\lambda k . k\ (\lambda x. \overline{M})$\\
+$\overline{M\ N}$ &=& $\lambda k . \overline{M}\ (\lambda m . \overline{N}\ (\lambda n . m\ n\ k))$\\
+\end{tabular}
+\\
+\\
+\textbf{Example:} The CPS transform of $M_0 = (\lambda x . x)\ 0$ is:\\
+\begin{eqnarray*}
+ \overline{M_0} =\\
+\overline{(\lambda x . x)\ 0}=\\
+\lambda k_0 . \overline{(\lambda x . x)}\ (\lambda m . \overline{0}\ (\lambda n . m\ n\ k_0)) =\\
+\lambda k_0 . (\lambda k_1 . k_1\ (\lambda x . (\lambda k_2 . k_2 x)))\ 
+(\lambda m . (\lambda k_3 . k_3\ 0)\ (\lambda n . m\ n\ k_0))\\
+\end{eqnarray*}
+\\
+Passing in the initial continuation $id = \lambda z . z$ to instantiate $k_0$, the resulting term
+evaluates as:\\
+
+\begin{eqnarray*}
+ (\lambda k_1 . k_1 (\lambda x . (\lambda k_2 . k_2 x)))\ 
+(\lambda m . (\lambda k_3 . k_3 0)\ (\lambda n . m\ n\ id)) \rightarrow \\
+%
+(\lambda m . (\lambda k_3 . k_3 0)\ (\lambda n . m\ n\ id))\ 
+(\lambda x . (\lambda k_2 . k_2 x)) \rightarrow \\
+%
+(\lambda k_3 . k_3\ 0) (\lambda n . (\lambda x. (\lambda k_2. k_2 x))\ n\ id) \rightarrow\\
+%
+(\lambda n . (\lambda x. (\lambda k_2. k_2 x))\ n\ id)\ 0 \rightarrow\\
+%
+((\lambda x. (\lambda k_2. k_2 x))\ 0\ id) \rightarrow\\
+%
+((\lambda k_2. k_2\ 0)\ id) \rightarrow\\
+%
+id\ 0 \rightarrow\\
+%
+0\\
+\square
+\end{eqnarray*}
+
+It may be interesting to note that the reduction of the CPS-transformed term results in a sequence
+of reductions each of the form: $(\lambda u. M)\ (\lambda v. N)$, so that $u$ determines the evaluation
+position of $N$; in general, $N$ will be evaluated exactly when $v$ has been instantiated, and the
+resulting term appears on the RHS of the next application.\\
+
+It is also instructive to note that the CPS transform changes types; for a type $\alpha$,
+and ground type $o$, define $\overline{\alpha}$ as:\\
+
+\begin{tabular}[t]{lll}
+ $\overline{o}$ &=& $o$\\
+$\overline{(\alpha \rightarrow \beta)}$ &=& $\overline{\alpha}
+  \rightarrow (\overline{\beta} \rightarrow o) \rightarrow o$\\
+\end{tabular}
+\\
+\\
+The effect on function types is transform a function accepting an argument of type $\alpha$
+and returning a value of type $\beta$ into a function accepting a ``continuized'' $\alpha$ and
+a function producing an intermediate result from $\beta$ and producing a ground object $o$.
+
+\subsection{Properties of the Transform}
+
+CBV convertability is preserved by CPS transform, as proven by Plotkin in ``Call-by-name, call-by-value
+and the lambda calculus" (1975):\\
+\\
+\textbf{Theorem:} If $M$ and $N$ are closed and $\lambda_v \vdash M = N$, then $\lambda_v \vdash
+\overline{M} = \overline{N}$.\\
+\\
+As such, application of the CPS transform does not disturb the reduction procedures of $\lambda_v$.
+As such, optimizations correct for direct terms are also possible on CPS terms.
+Note, however, that convertability does not coincide with observation congruence.\\
+\\
+\textbf{Theorem (Correctness):} If $M$ is a complete program and $c : o$, then:\\
+\[
+ Eval_v(M) = c \iff Eval_v (\overline{M} (\lambda x^o . x)) = c
+\]
+\\
+Clearly, if $M$ evaluates to $c$, then $\overline{M}$ should also evaluate to $c$, otherwise the
+transform would be of no use.
+
+\section{Operational Semantics and CPS}
+
+\textbf{Definition (Observational Congruence)}: $M : \alpha$ and $N : \alpha$ are
+\emph{observationally congruent} if:\\
+\[
+ \lambda_v \vdash C[M] = c \iff \lambda_v \vdash C[N] = c
+\]
+for all contexts $C[\bullet]$ and ground constants $c$.$\square$\\
+\\
+In general, the exact meaning of observational congruence will depend upon the set of contexts over
+which $C[\bullet]$ ranges.  In particular, two terms that are observationally congruent in $\lambda_v$
+do not necessarily have CPS images that are also observationally congruent in $\lambda_v$.\\
+\\
+\textbf{Theorem (Congruence Not Preserved by CPS):} There exist two closed terms $M$ and $N$ such that
+$M \equiv_v N$ and $\overline{M} \equiv_v \overline{N}$.\\
+\\
+The terms $M_1$ and $M_2$ above have this property.  They are clearly observationally congruent.
+However, $\overline{M_1}$ and $\overline{M_2}$ are distinguished by the following context:\\
+\begin{tabular}[t]{lll}
+ $C[\bullet]$ &=& $[\bullet] N_0$\\
+$N_0$ &=& $\lambda f . f\ 1\ N_1$\\
+$N_1$ &=& $\lambda g . g\ (\lambda x . \lambda y. 1) N_2$\\
+$N_2$ &=& $\lambda h . h\ (\lambda x . \lambda y. \Omega) (\lambda x . x)$\\
+\end{tabular}
+\\
+In this context, $C[\overline{M_2}]$ terminates but $C[\overline{M_1}]$ does not.  As in the examples
+above, termination or non-termination is determined by whether $\Omega$ is ever evaluated, which
+in turn is determined by whether or not $\Omega$ ever appears alone in the argument position of a
+matching evaluation pattern. $\square$\\
+
+\end{document}
